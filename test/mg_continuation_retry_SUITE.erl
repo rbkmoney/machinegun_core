@@ -54,7 +54,7 @@ all() ->
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_events_sink_machine, '_', '_'}, x),
-    Apps = mg_ct_helper:start_applications([mg]),
+    Apps = mg_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->
@@ -88,7 +88,7 @@ continuation_delayed_retries_test(_C) ->
 %% processor
 %%
 
--spec process_machine(_Options, mg:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
+-spec process_machine(_Options, machinegun_core:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
     mg_machine:processor_result() | no_return().
 process_machine(_, _, {init, InitState}, _, ?REQ_CTX, _, null) ->
     _ = ets:new(?ETS_NS, [set, named_table, public]),

@@ -93,7 +93,7 @@ init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_workers_manager, '_', '_'}, x),
     % dbg:tpl({mg_workers, '_', '_'}, x),
-    Apps = mg_ct_helper:start_applications([consuela, mg]),
+    Apps = mg_ct_helper:start_applications([consuela, machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->

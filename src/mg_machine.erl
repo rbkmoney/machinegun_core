@@ -139,7 +139,7 @@
 -type suicide_probability() :: float() | integer() | undefined. % [0, 1]
 
 -type options() :: #{
-    namespace                => mg:ns(),
+    namespace                => machinegun_core:ns(),
     storage                  => storage_options(),
     processor                => mg_utils:mod_opts(),
     worker                   => mg_workers_manager:options(),
@@ -191,7 +191,7 @@
     |  remove
 .
 -type processor_result() :: {processor_reply_action(), processor_flow_action(), machine_state()}.
--type request_context() :: mg:request_context().
+-type request_context() :: machinegun_core:request_context().
 
 -type processor_retry() :: mg_retry:strategy() | undefined.
 
@@ -202,7 +202,7 @@
     supervisor:child_spec() | undefined.
 -callback process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, MachineState) -> Result when
     Options :: any(),
-    ID :: mg:id(),
+    ID :: machinegun_core:id(),
     Impact :: processor_impact(),
     PCtx :: processing_context(),
     ReqCtx :: request_context(),
@@ -287,61 +287,61 @@ scheduler_sup_child_spec(Options, ChildID) ->
         type     => supervisor
     }.
 
--spec start(options(), mg:id(), term(), request_context(), deadline()) ->
+-spec start(options(), machinegun_core:id(), term(), request_context(), deadline()) ->
     _Resp | throws().
 start(Options, ID, Args, ReqCtx, Deadline) ->
     call_(Options, ID, {start, Args}, ReqCtx, Deadline).
 
--spec simple_repair(options(), mg:id(), request_context(), deadline()) ->
+-spec simple_repair(options(), machinegun_core:id(), request_context(), deadline()) ->
     _Resp | throws().
 simple_repair(Options, ID, ReqCtx, Deadline) ->
     call_(Options, ID, simple_repair, ReqCtx, Deadline).
 
--spec repair(options(), mg:id(), term(), request_context(), deadline()) ->
+-spec repair(options(), machinegun_core:id(), term(), request_context(), deadline()) ->
     _Resp | throws().
 repair(Options, ID, Args, ReqCtx, Deadline) ->
     call_(Options, ID, {repair, Args}, ReqCtx, Deadline).
 
--spec call(options(), mg:id(), term(), request_context(), deadline()) ->
+-spec call(options(), machinegun_core:id(), term(), request_context(), deadline()) ->
     _Resp | throws().
 call(Options, ID, Call, ReqCtx, Deadline) ->
     call_(Options, ID, {call, Call}, ReqCtx, Deadline).
 
--spec send_timeout(options(), mg:id(), genlib_time:ts(), deadline()) ->
+-spec send_timeout(options(), machinegun_core:id(), genlib_time:ts(), deadline()) ->
     _Resp | throws().
 send_timeout(Options, ID, Timestamp, Deadline) ->
     call_(Options, ID, {timeout, Timestamp}, undefined, Deadline).
 
--spec resume_interrupted(options(), mg:id(), deadline()) ->
+-spec resume_interrupted(options(), machinegun_core:id(), deadline()) ->
     _Resp | throws().
 resume_interrupted(Options, ID, Deadline) ->
     call_(Options, ID, resume_interrupted_one, undefined, Deadline).
 
--spec fail(options(), mg:id(), request_context(), deadline()) ->
+-spec fail(options(), machinegun_core:id(), request_context(), deadline()) ->
     ok.
 fail(Options, ID, ReqCtx, Deadline) ->
     fail(Options, ID, {error, explicit_fail, []}, ReqCtx, Deadline).
 
--spec fail(options(), mg:id(), mg_utils:exception(), request_context(), deadline()) ->
+-spec fail(options(), machinegun_core:id(), mg_utils:exception(), request_context(), deadline()) ->
     ok.
 fail(Options, ID, Exception, ReqCtx, Deadline) ->
     call_(Options, ID, {fail, Exception}, ReqCtx, Deadline).
 
--spec get(options(), mg:id()) ->
+-spec get(options(), machinegun_core:id()) ->
     machine_state() | throws().
 get(Options, ID) ->
     {_, #{state := State}} =
         mg_utils:throw_if_undefined(get_storage_machine(Options, ID), {logic, machine_not_found}),
     State.
 
--spec get_status(options(), mg:id()) ->
+-spec get_status(options(), machinegun_core:id()) ->
     machine_status() | throws().
 get_status(Options, ID) ->
     {_, #{status := Status}} =
         mg_utils:throw_if_undefined(get_storage_machine(Options, ID), {logic, machine_not_found}),
     Status.
 
--spec is_exist(options(), mg:id()) ->
+-spec is_exist(options(), machinegun_core:id()) ->
     boolean() | throws().
 is_exist(Options, ID) ->
     get_storage_machine(Options, ID) =/= undefined.
@@ -363,7 +363,7 @@ search(Options, Query) ->
     % TODO deadline
     mg_storage:search(storage_options(Options), storage_search_query(Query)).
 
--spec call_with_lazy_start(options(), mg:id(), term(), request_context(), deadline(), term()) ->
+-spec call_with_lazy_start(options(), machinegun_core:id(), term(), request_context(), deadline(), term()) ->
     _Resp | throws().
 call_with_lazy_start(Options, ID, Call, ReqCtx, Deadline, StartArgs) ->
     try
@@ -403,7 +403,7 @@ reply(#{call_context := CallContext}, Reply) ->
 all_statuses() ->
     [sleeping, waiting, retrying, processing, failed].
 
--spec call_(options(), mg:id(), _, maybe(request_context()), deadline()) ->
+-spec call_(options(), machinegun_core:id(), _, maybe(request_context()), deadline()) ->
     _ | no_return().
 call_(Options, ID, Call, ReqCtx, Deadline) ->
     mg_utils:throw_if_error(mg_workers_manager:call(manager_options(Options), ID, Call, ReqCtx, Deadline)).
@@ -412,8 +412,8 @@ call_(Options, ID, Call, ReqCtx, Deadline) ->
 %% mg_worker callbacks
 %%
 -type state() :: #{
-    id              => mg:id(),
-    namespace       => mg:ns(),
+    id              => machinegun_core:id(),
+    namespace       => machinegun_core:ns(),
     options         => options(),
     schedulers      => #{scheduler_type() => scheduler_ref()},
     storage_machine => storage_machine() | nonexistent | unknown,
@@ -428,7 +428,7 @@ call_(Options, ID, Call, ReqCtx, Deadline) ->
 -type scheduler_ref() ::
     {mg_scheduler:id(), _TargetCutoff :: seconds()}.
 
--spec handle_load(mg:id(), options(), request_context()) ->
+-spec handle_load(machinegun_core:id(), options(), request_context()) ->
     {ok, state()}.
 handle_load(ID, Options, ReqCtx) ->
     Namespace = maps:get(namespace, Options),
@@ -538,7 +538,7 @@ new_storage_machine() ->
         state  => null
     }.
 
--spec get_storage_machine(options(), mg:id()) ->
+-spec get_storage_machine(options(), machinegun_core:id()) ->
     {mg_storage:context(), storage_machine()} | undefined.
 get_storage_machine(Options, ID) ->
     try mg_storage:get(storage_options(Options), ID) of
@@ -1129,7 +1129,7 @@ extract_timer_queue_info({retrying, Timestamp, _, _, _}) ->
 extract_timer_queue_info(_Other) ->
     {error, not_timer}.
 
--spec emit_machine_load_beat(options(), mg:ns(), mg:id(), request_context(), StorageMachine) -> ok when
+-spec emit_machine_load_beat(options(), machinegun_core:ns(), machinegun_core:id(), request_context(), StorageMachine) -> ok when
     StorageMachine :: storage_machine() | unknown | nonexistent.
 emit_machine_load_beat(Options, Namespace, ID, ReqCtx, nonexistent) ->
     ok = emit_beat(Options, #mg_machine_lifecycle_created{
@@ -1267,7 +1267,7 @@ try_suicide(#{}, _) ->
 %%
 %% retrying
 %%
--spec do_with_retry(options(), mg:id(), fun(() -> R), mg_retry:strategy(), request_context(), atom()) ->
+-spec do_with_retry(options(), machinegun_core:id(), fun(() -> R), mg_retry:strategy(), request_context(), atom()) ->
     R.
 do_with_retry(Options = #{namespace := NS}, ID, Fun, RetryStrategy, ReqCtx, BeatCtx) ->
     try

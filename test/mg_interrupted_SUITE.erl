@@ -52,7 +52,7 @@ all() ->
 -spec init_per_suite(config()) ->
     config().
 init_per_suite(C) ->
-    Apps = mg_ct_helper:start_applications([mg]),
+    Apps = mg_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->
@@ -101,7 +101,7 @@ interrupted_machines_resumed(_C) ->
 %%
 %% processor
 %%
--spec process_machine(_Options, mg:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
+-spec process_machine(_Options, machinegun_core:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
     mg_machine:processor_result() | no_return().
 process_machine(_, _, {init, ?init_args}, _, ?req_ctx, _, null) ->
     {{reply, ok}, sleep, #{}};
@@ -126,7 +126,7 @@ start_automaton(Options) ->
 stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid).
 
--spec automaton_options(mg:ns(), mg_storage:name()) ->
+-spec automaton_options(machinegun_core:ns(), mg_storage:name()) ->
     mg_machine:options().
 automaton_options(NS, StorageName) ->
     Scheduler = #{

@@ -58,7 +58,7 @@ all() ->
 -spec init_per_suite(config()) ->
     config().
 init_per_suite(C) ->
-    Apps = mg_ct_helper:start_applications([mg]),
+    Apps = mg_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->

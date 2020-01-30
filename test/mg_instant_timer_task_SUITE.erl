@@ -58,7 +58,7 @@ all() ->
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_machine, '_', '_'}, x),
-    Apps = mg_ct_helper:start_applications([mg]),
+    Apps = mg_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->
@@ -124,7 +124,7 @@ pool_child_spec(_Options, Name) ->
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, MachineState) -> Result when
     Options :: any(),
-    ID :: mg:id(),
+    ID :: machinegun_core:id(),
     Impact :: mg_machine:processor_impact(),
     PCtx :: mg_machine:processing_context(),
     ReqCtx :: mg_machine:request_context(),
@@ -190,7 +190,7 @@ stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options(mg:ns()) ->
+-spec automaton_options(machinegun_core:ns()) ->
     mg_machine:options().
 automaton_options(NS) ->
     Scheduler = #{
@@ -211,7 +211,7 @@ automaton_options(NS) ->
         }
     }.
 
--spec automaton_options_wo_shedulers(mg:ns()) ->
+-spec automaton_options_wo_shedulers(machinegun_core:ns()) ->
     mg_machine:options().
 automaton_options_wo_shedulers(NS) ->
     #{

@@ -13,29 +13,13 @@
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
 %%%
+-module(machinegun_core).
 
-{application, mg , [
-    {description, "Machinegun FSM processor"},
-    {vsn, "1"},
-    {registered, []},
-    {applications, [
-        kernel,
-        stdlib,
-        genlib,
-        gproc,
-        consuela,
-        riakc,
-        pooler,
-        brod,
-        msgpack,
-        rfc3339
-    ]},
-    {env, []},
-    {modules, []},
-    {maintainers, [
-        "Petr Kozorezov <petr.kozorezov@gmail.com>",
-        "Andrey Mayorov <a.mayorov@rbkmoney.com>"
-    ]},
-    {licenses, []},
-    {links, []}
-]}.
+%% API
+-export_type([ns/0]).
+-export_type([id/0]).
+-export_type([request_context/0]).
+
+-type ns() :: binary().
+-type id() :: binary().
+-type request_context() :: mg_storage:opaque().

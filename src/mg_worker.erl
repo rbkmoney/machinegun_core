@@ -72,12 +72,12 @@ child_spec(ChildID, Options) ->
         shutdown => brutal_kill
     }.
 
--spec start_link(options(), mg:ns(), mg:id(), _ReqCtx) ->
+-spec start_link(options(), machinegun_core:ns(), machinegun_core:id(), _ReqCtx) ->
     mg_utils:gen_start_ret().
 start_link(Options, NS, ID, ReqCtx) ->
     mg_procreg:start_link(procreg_options(Options), ?wrap_id(NS, ID), ?MODULE, {ID, Options, ReqCtx}, []).
 
--spec call(options(), mg:ns(), mg:id(), _Call, _ReqCtx, mg_deadline:deadline(), pulse()) ->
+-spec call(options(), machinegun_core:ns(), machinegun_core:id(), _Call, _ReqCtx, mg_deadline:deadline(), pulse()) ->
     _Result | {error, _}.
 call(Options, NS, ID, Call, ReqCtx, Deadline, Pulse) ->
     ok = mg_pulse:handle_beat(Pulse, #mg_worker_call_attempt{
@@ -94,7 +94,7 @@ call(Options, NS, ID, Call, ReqCtx, Deadline, Pulse) ->
     ).
 
 %% for testing
--spec brutal_kill(options(), mg:ns(), mg:id()) ->
+-spec brutal_kill(options(), machinegun_core:ns(), machinegun_core:id()) ->
     ok.
 brutal_kill(Options, NS, ID) ->
     case mg_utils:gen_reg_name_to_pid(self_ref(Options, NS, ID)) of
@@ -112,21 +112,21 @@ reply(CallCtx, Reply) ->
     _ = gen_server:reply(CallCtx, Reply),
     ok.
 
--spec get_call_queue(options(), mg:ns(), mg:id()) ->
+-spec get_call_queue(options(), machinegun_core:ns(), machinegun_core:id()) ->
     [_Call].
 get_call_queue(Options, NS, ID) ->
     Pid = mg_utils:exit_if_undefined(mg_utils:gen_reg_name_to_pid(self_ref(Options, NS, ID)), noproc),
     {messages, Messages} = erlang:process_info(Pid, messages),
     [Call || {'$gen_call', _, {call, _, Call, _}} <- Messages].
 
--spec is_alive(options(), mg:ns(), mg:id()) ->
+-spec is_alive(options(), machinegun_core:ns(), machinegun_core:id()) ->
     boolean().
 is_alive(Options, NS, ID) ->
     Pid = mg_utils:gen_reg_name_to_pid(self_ref(Options, NS, ID)),
     Pid =/= undefined andalso erlang:is_process_alive(Pid).
 
--spec list(mg_procreg:options(), mg:ns()) -> % TODO nonuniform interface
-    [{mg:ns(), mg:id(), pid()}].
+-spec list(mg_procreg:options(), machinegun_core:ns()) -> % TODO nonuniform interface
+    [{machinegun_core:ns(), machinegun_core:id(), pid()}].
 list(Procreg, NS) ->
     [
         {NS, ID, Pid} ||
@@ -258,7 +258,7 @@ schedule_unload_timer(State=#{unload_tref:=UnloadTRef}) ->
 start_timer(State) ->
     erlang:start_timer(unload_timeout(State), erlang:self(), unload).
 
--spec self_ref(options(), mg:ns(), mg:id()) ->
+-spec self_ref(options(), machinegun_core:ns(), machinegun_core:id()) ->
     mg_procreg:ref().
 self_ref(Options, NS, ID) ->
     mg_procreg:ref(procreg_options(Options), ?wrap_id(NS, ID)).

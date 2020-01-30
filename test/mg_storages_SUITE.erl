@@ -111,7 +111,7 @@ base_test(C) ->
     base_test(1, Options),
     ok = stop_storage(Pid).
 
--spec base_test(mg:id(), mg_storage:options()) ->
+-spec base_test(machinegun_core:id(), mg_storage:options()) ->
     _.
 base_test(ID, Options) ->
     Key = genlib:to_binary(ID),

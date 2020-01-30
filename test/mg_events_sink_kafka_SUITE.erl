@@ -77,7 +77,7 @@ init_per_suite(C) ->
                 ]}
             ]}
         ]},
-        {mg, []}
+        {machinegun_core, []}
     ],
     Apps = lists:flatten([genlib_app:start_application_with(App, AppConf) || {App, AppConf} <- AppSpecs]),
     {Events, _} = mg_events:generate_events_with_range([{#{}, Body} || Body <- [1, 2, 3]], undefined),

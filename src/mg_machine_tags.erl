@@ -29,7 +29,7 @@
 -export([process_machine/7]).
 
 -type options() :: #{
-    namespace => mg:ns(),
+    namespace => machinegun_core:ns(),
     worker    => mg_workers_manager:options(),
     storage   => mg_machine:storage_options(),
     pulse     => mg_pulse:handler(),
@@ -42,18 +42,18 @@
 child_spec(Options, ChildID) ->
     mg_machine:child_spec(machine_options(Options), ChildID).
 
--spec add(options(), tag(), mg:id(), mg:request_context(), mg_deadline:deadline()) ->
-    ok | {already_exists, mg:id()} | no_return().
+-spec add(options(), tag(), machinegun_core:id(), machinegun_core:request_context(), mg_deadline:deadline()) ->
+    ok | {already_exists, machinegun_core:id()} | no_return().
 add(Options, Tag, ID, ReqCtx, Deadline) ->
     mg_machine:call_with_lazy_start(machine_options(Options), Tag, {add, ID}, ReqCtx, Deadline, undefined).
 
--spec replace(options(), tag(), mg:id(), mg:request_context(), mg_deadline:deadline()) ->
+-spec replace(options(), tag(), machinegun_core:id(), machinegun_core:request_context(), mg_deadline:deadline()) ->
     ok | no_return().
 replace(Options, Tag, ID, ReqCtx, Deadline) ->
     mg_machine:call_with_lazy_start(machine_options(Options), Tag, {replace, ID}, ReqCtx, Deadline, undefined).
 
 -spec resolve(options(), tag()) ->
-    mg:id() | undefined | no_return().
+    machinegun_core:id() | undefined | no_return().
 resolve(Options, Tag) ->
     try
         opaque_to_state(mg_machine:get(machine_options(Options), Tag))
@@ -64,9 +64,9 @@ resolve(Options, Tag) ->
 %%
 %% mg_machine handler
 %%
--type state() :: mg:id() | undefined.
+-type state() :: machinegun_core:id() | undefined.
 
--spec process_machine(_, mg:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
+-spec process_machine(_, machinegun_core:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
     mg_machine:processor_result().
 process_machine(_, _, {init, undefined}, _, _, _, _) ->
     {{reply, ok}, sleep, state_to_opaque(undefined)};

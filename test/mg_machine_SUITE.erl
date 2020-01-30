@@ -71,7 +71,7 @@ groups() ->
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_machine, '_', '_'}, x),
-    Apps = mg_ct_helper:start_applications([consuela, mg]),
+    Apps = mg_ct_helper:start_applications([consuela, machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->
@@ -157,7 +157,7 @@ pool_child_spec(_Options, Name) ->
         start => {?MODULE, start, []}
     }.
 
--spec process_machine(_Options, mg:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
+-spec process_machine(_Options, machinegun_core:id(), mg_machine:processor_impact(), _, _, _, mg_machine:machine_state()) ->
     mg_machine:processor_result() | no_return().
 process_machine(_, _, {_, fail}, _, ?req_ctx, _, _) ->
     _ = exit(1),

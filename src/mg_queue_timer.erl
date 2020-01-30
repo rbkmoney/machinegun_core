@@ -30,7 +30,7 @@
 -type seconds() :: non_neg_integer().
 -type milliseconds() :: non_neg_integer().
 -type options() :: #{
-    namespace := mg:ns(),
+    namespace := machinegun_core:ns(),
     scheduler_name := mg_scheduler:name(),
     pulse := mg_pulse:handler(),
     machine := mg_machine:options(),
@@ -49,7 +49,7 @@
 
 %% Internal types
 
--type task_id() :: mg:id().
+-type task_id() :: machinegun_core:id().
 -type task_payload() :: #{}.
 -type target_time() :: mg_queue_task:target_time().
 -type task() :: mg_queue_task:task(task_id(), task_payload()).
@@ -67,7 +67,7 @@
 init(_Options) ->
     {ok, #state{}}.
 
--spec build_task(mg:id(), target_time()) ->
+-spec build_task(machinegun_core:id(), target_time()) ->
     task().
 build_task(ID, Timestamp) ->
     #{

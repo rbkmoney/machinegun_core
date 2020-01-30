@@ -33,7 +33,7 @@
 -type deadline() :: mg_deadline:deadline().
 -type event() :: term().
 -type machine() :: mg_events_machine:machine().
--type req_ctx() :: mg:request_context().
+-type req_ctx() :: machinegun_core:request_context().
 -type signal() :: mg_events_machine:signal().
 -type signal_result() :: mg_events_machine:signal_result().
 
@@ -46,7 +46,7 @@
 -type processor() :: {module(), handlers()}.
 -type options() :: #{
     processor := processor(),
-    namespace := mg:ns(),
+    namespace := machinegun_core:ns(),
     event_stash_size := non_neg_integer()
 }.
 
@@ -66,7 +66,7 @@ all() ->
 -spec init_per_suite(config()) ->
     config().
 init_per_suite(C) ->
-    Apps = mg_ct_helper:start_applications([mg]),
+    Apps = mg_ct_helper:start_applications([machinegun_core]),
     {ok, StoragePid} = mg_storage_memory:start_link(#{name => ?MODULE}),
     true = erlang:unlink(StoragePid),
     [{apps, Apps} | C].
@@ -170,7 +170,7 @@ process_repair(Options, _ReqCtx, _Deadline, {EncodedArgs, Machine}) ->
     StateChange = {AuxStateContent, Events},
     {ok, {encode(Result), StateChange, ComplexAction}}.
 
--spec add_events(handlers(), mg:ns(), mg:id(), [event()], req_ctx(), deadline()) ->
+-spec add_events(handlers(), machinegun_core:ns(), machinegun_core:id(), [event()], req_ctx(), deadline()) ->
     ok.
 add_events(Handlers, _NS, _MachineID, Events, _ReqCtx, _Deadline) ->
     Handler = maps:get(sink_handler, Handlers, fun dummy_sink_handler/1),
@@ -264,14 +264,14 @@ events_machine_options(Options) ->
 
 %%
 
--spec start(options(), mg:id(), term()) ->
+-spec start(options(), machinegun_core:id(), term()) ->
     ok.
 start(Options, MachineID, Args) ->
     Deadline = mg_deadline:from_timeout(3000),
     MgOptions = events_machine_options(Options),
     mg_events_machine:start(MgOptions, MachineID, encode(Args), <<>>, Deadline).
 
--spec call(options(), mg:id(), term()) ->
+-spec call(options(), machinegun_core:id(), term()) ->
     term().
 call(Options, MachineID, Args) ->
     HRange = {undefined, undefined, forward},
@@ -280,7 +280,7 @@ call(Options, MachineID, Args) ->
     Result = mg_events_machine:call(MgOptions, {id, MachineID}, encode(Args), HRange, <<>>, Deadline),
     decode(Result).
 
--spec get_history(options(), mg:id()) ->
+-spec get_history(options(), machinegun_core:id()) ->
     ok.
 get_history(Options, MachineID) ->
     HRange = {undefined, undefined, forward},

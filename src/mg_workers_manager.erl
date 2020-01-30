@@ -51,9 +51,9 @@
 -type queue_limit() :: non_neg_integer().
 
 %% Internal types
--type id() :: mg:id().
--type name() :: mg:ns().
--type req_ctx() :: mg:request_context().
+-type id() :: machinegun_core:id().
+-type name() :: machinegun_core:ns().
+-type req_ctx() :: machinegun_core:request_context().
 -type gen_ref() :: mg_utils:gen_ref().
 -type maybe(T) :: T | undefined.
 -type deadline() :: mg_deadline:deadline().

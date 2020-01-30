@@ -50,7 +50,7 @@
 -type action() :: mg_events_machine:complex_action().
 -type event() :: term().
 -type aux_state() :: term().
--type req_ctx() :: mg:request_context().
+-type req_ctx() :: machinegun_core:request_context().
 -type deadline() :: mg_deadline:deadline().
 
 -type options() :: #{
@@ -74,7 +74,7 @@ all() ->
 -spec init_per_suite(config()) ->
     config().
 init_per_suite(C) ->
-    Apps = mg_ct_helper:start_applications([mg]),
+    Apps = mg_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) ->
@@ -151,7 +151,7 @@ process_repair(Options, _ReqCtx, _Deadline, {EncodedArgs, Machine}) ->
     StateChange = {AuxStateContent, Events},
     {ok, {encode(Result), StateChange, ComplexAction}}.
 
--spec add_events(options(), mg:ns(), mg:id(), [event()], req_ctx(), deadline()) ->
+-spec add_events(options(), machinegun_core:ns(), machinegun_core:id(), [event()], req_ctx(), deadline()) ->
     ok.
 add_events(Options, _NS, _MachineID, Events, _ReqCtx, _Deadline) ->
     Handler = maps:get(sink_handler, Options, fun dummy_sink_handler/1),
@@ -180,7 +180,7 @@ dummy_sink_handler(_Events) ->
 
 %% Utils
 
--spec start_automaton(options(), mg:ns()) ->
+-spec start_automaton(options(), machinegun_core:ns()) ->
     pid().
 start_automaton(Options, NS) ->
     mg_utils:throw_if_error(mg_events_machine:start_link(events_machine_options(Options, NS))).
@@ -191,7 +191,7 @@ stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec events_machine_options(options(), mg:ns()) ->
+-spec events_machine_options(options(), machinegun_core:ns()) ->
     mg_events_machine:options().
 events_machine_options(Options, NS) ->
     Scheduler = #{},
@@ -229,14 +229,14 @@ events_machine_options(Options, NS) ->
         event_stash_size => 5
     }.
 
--spec start(options(), mg:ns(), mg:id(), term()) ->
+-spec start(options(), machinegun_core:ns(), machinegun_core:id(), term()) ->
     ok.
 start(Options, NS, MachineID, Args) ->
     Deadline = mg_deadline:from_timeout(3000),
     MgOptions = events_machine_options(Options, NS),
     mg_events_machine:start(MgOptions, MachineID, encode(Args), <<>>, Deadline).
 
--spec call(options(), mg:ns(), mg:id(), term()) ->
+-spec call(options(), machinegun_core:ns(), machinegun_core:id(), term()) ->
     term().
 call(Options, NS, MachineID, Args) ->
     HRange = {undefined, undefined, forward},
@@ -244,7 +244,7 @@ call(Options, NS, MachineID, Args) ->
     MgOptions = events_machine_options(Options, NS),
     mg_events_machine:call(MgOptions, {id, MachineID}, encode(Args), HRange, <<>>, Deadline).
 
--spec repair(options(), mg:ns(), mg:id(), term()) ->
+-spec repair(options(), machinegun_core:ns(), machinegun_core:id(), term()) ->
     ok.
 repair(Options, NS, MachineID, Args) ->
     HRange = {undefined, undefined, forward},
@@ -253,7 +253,7 @@ repair(Options, NS, MachineID, Args) ->
     {ok, Response} = mg_events_machine:repair(MgOptions, {id, MachineID}, encode(Args), HRange, <<>>, Deadline),
     decode(Response).
 
--spec get_history(options(), mg:ns(), mg:id()) ->
+-spec get_history(options(), machinegun_core:ns(), machinegun_core:id()) ->
     [event()].
 get_history(Options, NS, MachineID) ->
     HRange = {undefined, undefined, forward},

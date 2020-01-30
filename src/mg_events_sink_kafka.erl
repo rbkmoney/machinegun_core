@@ -32,7 +32,7 @@
     encoder := encoder()
 }.
 
--type encoder() :: fun((mg:ns(), mg:id(), event()) -> iodata()).
+-type encoder() :: fun((machinegun_core:ns(), machinegun_core:id(), event()) -> iodata()).
 
 -export_type([options/0]).
 -export_type([encoder/0]).
@@ -40,12 +40,12 @@
 %% Internal types
 
 -type event() :: mg_events:event().
--type req_ctx() :: mg:request_context().
+-type req_ctx() :: machinegun_core:request_context().
 -type deadline() :: mg_deadline:deadline().
 
 %% API
 
--spec add_events(options(), mg:ns(), mg:id(), [event()], req_ctx(), deadline()) ->
+-spec add_events(options(), machinegun_core:ns(), machinegun_core:id(), [event()], req_ctx(), deadline()) ->
     ok.
 add_events(Options, NS, MachineID, Events, ReqCtx, Deadline) ->
     #{pulse := Pulse, client := Client, topic := Topic, encoder := Encoder, name := Name} = Options,
@@ -69,12 +69,12 @@ add_events(Options, NS, MachineID, Events, ReqCtx, Deadline) ->
 
 %% Internals
 
--spec event_key(mg:ns(), mg:id()) ->
+-spec event_key(machinegun_core:ns(), machinegun_core:id()) ->
     term().
 event_key(NS, MachineID) ->
     <<NS/binary, " ", MachineID/binary>>.
 
--spec encode(encoder(), mg:ns(), mg:id(), [event()]) ->
+-spec encode(encoder(), machinegun_core:ns(), machinegun_core:id(), [event()]) ->
     brod:batch_input().
 encode(Encoder, NS, MachineID, Events) ->
     [

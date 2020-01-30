@@ -405,9 +405,9 @@ identity(V) ->
 
 
 -spec add_machine_id
-    (mg:id(), T) -> T when T :: mg_storage:kv();
-    (mg:id(), T) -> T when T :: mg_storage:key();
-    (mg:id(), T) -> T when T :: [mg_storage:kv() | mg_storage:key()].
+    (machinegun_core:id(), T) -> T when T :: mg_storage:kv();
+    (machinegun_core:id(), T) -> T when T :: mg_storage:key();
+    (machinegun_core:id(), T) -> T when T :: [mg_storage:kv() | mg_storage:key()].
 add_machine_id(MachineID, List) when is_list(List) ->
     [add_machine_id(MachineID, Element) || Element <- List];
 add_machine_id(MachineID, {K, V}) ->
@@ -416,9 +416,9 @@ add_machine_id(MachineID, K) ->
     <<MachineID/binary, $_, K/binary>>.
 
 -spec remove_machine_id
-    (mg:id(), T) -> T when T :: mg_storage:kv();
-    (mg:id(), T) -> T when T :: mg_storage:key();
-    (mg:id(), T) -> T when T :: [mg_storage:kv() | mg_storage:key()].
+    (machinegun_core:id(), T) -> T when T :: mg_storage:kv();
+    (machinegun_core:id(), T) -> T when T :: mg_storage:key();
+    (machinegun_core:id(), T) -> T when T :: [mg_storage:kv() | mg_storage:key()].
 remove_machine_id(MachineID, List) when is_list(List) ->
     [remove_machine_id(MachineID, Element) || Element <- List];
 remove_machine_id(MachineID, {K, V}) ->
