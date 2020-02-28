@@ -23,7 +23,7 @@
 
 -export([reserve/4]).
 
-%% gen_server callbacks
+%% gen_server cafllbacks
 -export([init/1]).
 -export([handle_info/2]).
 -export([handle_cast/2]).
