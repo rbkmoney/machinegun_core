@@ -47,10 +47,6 @@
 -export([supervisor_old_flags     /1]).
 -export([supervisor_old_child_spec/1]).
 
-%% Woody
--export_type([woody_handlers/0]).
--export_type([woody_handler /0]).
-
 %% Other
 -export_type([mod_opts/0]).
 -export_type([mod_opts/1]).
@@ -221,12 +217,6 @@ supervisor_old_child_spec(ChildSpec = #{id := ChildID, start := Start = {M, _, _
         maps:get(type    , ChildSpec, worker   ),
         maps:get(modules , ChildSpec, [M]      )
     }.
-
-%%
-%% Woody
-%%
--type woody_handlers() :: [woody_handler()].
--type woody_handler () :: _.
 
 %%
 %% Other
