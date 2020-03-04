@@ -16,7 +16,7 @@
 
 -module(mg_scheduler_worker).
 
--include_lib("include/pulse.hrl").
+-include_lib("machinegun_core/include/pulse.hrl").
 
 -export([child_spec/3]).
 -export([start_link/2]).

@@ -15,7 +15,7 @@
 %%%
 -module(mg_pulse).
 
--include_lib("include/pulse.hrl").
+-include_lib("machinegun_core/include/pulse.hrl").
 
 %% API
 -export_type([beat         /0]).
