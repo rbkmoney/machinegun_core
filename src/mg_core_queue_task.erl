@@ -1,5 +1,5 @@
 %%%
-%%% Copyright 2017 RBKmoney
+%%% Copyright 2019 RBKmoney
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -13,13 +13,32 @@
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
 %%%
--module(machinegun_core).
 
-%% API
--export_type([ns/0]).
+-module(mg_core_queue_task).
+
+-type id() :: any().
+-type payload() :: any().
+-type target_time() :: genlib_time:ts(). % unix timestamp in seconds
+
+-type task(TaskID, TaskPayload) :: #{
+    id          := TaskID,
+    target_time := target_time(),
+    machine_id  := machinegun_core:id(),
+    payload     => TaskPayload
+}.
+
+-type task() :: task(id(), payload()).
+
 -export_type([id/0]).
--export_type([request_context/0]).
+-export_type([target_time/0]).
+-export_type([task/2]).
+-export_type([task/0]).
 
--type ns() :: binary().
--type id() :: binary().
--type request_context() :: mg_core_storage:opaque().
+-export([current_time/0]).
+
+%%
+
+-spec current_time() ->
+    target_time().
+current_time() ->
+    genlib_time:unow().

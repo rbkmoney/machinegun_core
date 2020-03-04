@@ -1,5 +1,5 @@
--ifndef(__mg_ct_helper__).
--define(__mg_ct_helper__, 42).
+-ifndef(__mg_core_ct_helper__).
+-define(__mg_core_ct_helper__, 42).
 
 -define(flushMailbox(__Acc0),
     (fun __Flush(__Acc) ->
