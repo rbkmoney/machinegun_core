@@ -348,12 +348,12 @@ run_handler({Handler, State}, Function, Args) ->
 -spec self_reg_name(scheduler_id()) ->
     mg_core_procreg:reg_name().
 self_reg_name(SchedulerID) ->
-    mg_core_procreg:reg_name(mg_procreg_gproc, {?MODULE, SchedulerID}).
+    mg_core_procreg:reg_name(mg_core_procreg_gproc, {?MODULE, SchedulerID}).
 
 -spec self_ref(scheduler_id()) ->
     mg_core_procreg:ref().
 self_ref(SchedulerID) ->
-    mg_core_procreg:ref(mg_procreg_gproc, {?MODULE, SchedulerID}).
+    mg_core_procreg:ref(mg_core_procreg_gproc, {?MODULE, SchedulerID}).
 
 %%
 

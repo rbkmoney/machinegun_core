@@ -190,12 +190,12 @@ handle_info(Info, State) ->
 -spec self_reg_name(id()) ->
     mg_core_procreg:reg_name().
 self_reg_name(ID) ->
-    mg_core_procreg:reg_name(mg_procreg_gproc, {?MODULE, ID}).
+    mg_core_procreg:reg_name(mg_core_procreg_gproc, {?MODULE, ID}).
 
 -spec self_ref(id()) ->
     mg_core_procreg:ref().
 self_ref(ID) ->
-    mg_core_procreg:ref(mg_procreg_gproc, {?MODULE, ID}).
+    mg_core_procreg:ref(mg_core_procreg_gproc, {?MODULE, ID}).
 
 % Helpers
 
