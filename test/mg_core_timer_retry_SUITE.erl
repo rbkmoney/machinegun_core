@@ -142,7 +142,7 @@ pool_child_spec(_Options, Name) ->
         start => {?MODULE, start, []}
     }.
 
--spec process_machine(_Options, machinegun_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
+-spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
 process_machine(_, _, {init, Mode}, _, ?req_ctx, _, null) ->
     {{reply, ok}, build_timer(), [Mode, 0]};
@@ -176,7 +176,7 @@ stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options(machinegun_core:ns(), mg_core_retry:policy()) ->
+-spec automaton_options(mg_core:ns(), mg_core_retry:policy()) ->
     mg_core_machine:options().
 automaton_options(NS, RetryPolicy) ->
     Scheduler = #{

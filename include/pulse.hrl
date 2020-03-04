@@ -2,31 +2,31 @@
 %% Timer operations
 
 -record(mg_core_timer_lifecycle_created, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     target_timestamp :: genlib_time:ts()
 }).
 
 -record(mg_core_timer_lifecycle_removed, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context()
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context()
 }).
 
 -record(mg_core_timer_lifecycle_rescheduled, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
     target_timestamp :: genlib_time:ts(),
     attempt :: non_neg_integer()
 }).
 
 -record(mg_core_timer_lifecycle_rescheduling_error, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
     exception :: mg_core_utils:exception()
 }).
@@ -35,18 +35,18 @@
 
 -record(mg_core_timer_process_started, {
     queue :: normal | retries,
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     target_timestamp :: genlib_time:ts(),
     deadline :: mg_core_deadline:deadline()
 }).
 
 -record(mg_core_timer_process_finished, {
     queue :: normal | retries,
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     target_timestamp :: genlib_time:ts(),
     deadline :: mg_core_deadline:deadline(),
     duration :: non_neg_integer()  % in native units
@@ -55,7 +55,7 @@
 %% Scheduler
 
 -record(mg_core_scheduler_search_success, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
     delay :: mg_core_queue_scanner:scan_delay(),
     tasks :: [mg_core_queue_task:task()],
@@ -64,49 +64,49 @@
 }).
 
 -record(mg_core_scheduler_search_error, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
     exception :: mg_core_utils:exception()
 }).
 
 -record(mg_core_scheduler_task_error, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
     exception :: mg_core_utils:exception(),
-    machine_id :: machinegun_core:id() | undefined
+    machine_id :: mg_core:id() | undefined
 }).
 
 -record(mg_core_scheduler_task_add_error, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
     exception :: mg_core_utils:exception(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context()
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context()
 }).
 
 -record(mg_core_scheduler_new_tasks, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
     new_tasks_count :: non_neg_integer()
 }).
 
 -record(mg_core_scheduler_task_started, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
-    machine_id :: machinegun_core:id() | undefined,
+    machine_id :: mg_core:id() | undefined,
     task_delay :: timeout()
 }).
 
 -record(mg_core_scheduler_task_finished, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
-    machine_id :: machinegun_core:id() | undefined,
+    machine_id :: mg_core:id() | undefined,
     task_delay :: timeout(),
     process_duration :: non_neg_integer()  % in native units
 }).
 
 -record(mg_core_scheduler_quota_reserved, {
-    namespace :: machinegun_core:ns(),
+    namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
     active_tasks :: non_neg_integer() ,
     waiting_tasks :: non_neg_integer(),
@@ -117,25 +117,25 @@
 %% Machine
 
 -record(mg_core_machine_process_transient_error, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
     exception :: mg_core_utils:exception(),
-    request_context :: machinegun_core:request_context()
+    request_context :: mg_core:request_context()
 }).
 
 -record(mg_core_machine_process_started, {
     processor_impact :: mg_core_machine:processor_impact(),
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline()
 }).
 
 -record(mg_core_machine_process_finished, {
     processor_impact :: mg_core_machine:processor_impact(),
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
     duration :: non_neg_integer()  % in native units
 }).
@@ -143,56 +143,56 @@
 %% Machines state
 
 -record(mg_core_machine_lifecycle_loaded, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context()
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context()
 }).
 
 -record(mg_core_machine_lifecycle_created, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context()
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context()
 }).
 
 -record(mg_core_machine_lifecycle_removed, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context()
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context()
 }).
 
 -record(mg_core_machine_lifecycle_unloaded, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id()
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id()
 }).
 
 -record(mg_core_machine_lifecycle_committed_suicide, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     suicide_probability :: mg_core_machine:suicide_probability()
 }).
 
 -record(mg_core_machine_lifecycle_failed, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
     exception :: mg_core_utils:exception()
 }).
 
 -record(mg_core_machine_lifecycle_loading_error, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     exception :: mg_core_utils:exception()
 }).
 
 -record(mg_core_machine_lifecycle_transient_error, {
     context :: atom(),
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
     exception :: mg_core_utils:exception(),
-    request_context :: machinegun_core:request_context(),
+    request_context :: mg_core:request_context(),
     retry_strategy :: mg_core_retry:strategy(),
     retry_action :: {wait, timeout(), mg_core_retry:strategy()} | finish
 }).
@@ -200,16 +200,16 @@
 %% Workers management
 
 -record(mg_core_worker_call_attempt, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline()
 }).
 
 -record(mg_core_worker_start_attempt, {
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     msg_queue_len :: non_neg_integer(),
     msg_queue_limit :: mg_core_workers_manager:queue_limit()
 }).
@@ -218,9 +218,9 @@
 
 -record(mg_core_events_sink_kafka_sent, {
     name :: atom(),
-    namespace :: machinegun_core:ns(),
-    machine_id :: machinegun_core:id(),
-    request_context :: machinegun_core:request_context(),
+    namespace :: mg_core:ns(),
+    machine_id :: mg_core:id(),
+    request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
     encode_duration :: non_neg_integer(),  % in native units
     send_duration :: non_neg_integer(),  % in native units

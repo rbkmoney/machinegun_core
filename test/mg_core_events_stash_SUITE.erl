@@ -33,7 +33,7 @@
 -type deadline() :: mg_core_deadline:deadline().
 -type event() :: term().
 -type machine() :: mg_core_events_machine:machine().
--type req_ctx() :: machinegun_core:request_context().
+-type req_ctx() :: mg_core:request_context().
 -type signal() :: mg_core_events_machine:signal().
 -type signal_result() :: mg_core_events_machine:signal_result().
 
@@ -46,7 +46,7 @@
 -type processor() :: {module(), handlers()}.
 -type options() :: #{
     processor := processor(),
-    namespace := machinegun_core:ns(),
+    namespace := mg_core:ns(),
     event_stash_size := non_neg_integer()
 }.
 
@@ -170,7 +170,7 @@ process_repair(Options, _ReqCtx, _Deadline, {EncodedArgs, Machine}) ->
     StateChange = {AuxStateContent, Events},
     {ok, {encode(Result), StateChange, ComplexAction}}.
 
--spec add_events(handlers(), machinegun_core:ns(), machinegun_core:id(), [event()], req_ctx(), deadline()) ->
+-spec add_events(handlers(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) ->
     ok.
 add_events(Handlers, _NS, _MachineID, Events, _ReqCtx, _Deadline) ->
     Handler = maps:get(sink_handler, Handlers, fun dummy_sink_handler/1),
@@ -264,14 +264,14 @@ events_machine_options(Options) ->
 
 %%
 
--spec start(options(), machinegun_core:id(), term()) ->
+-spec start(options(), mg_core:id(), term()) ->
     ok.
 start(Options, MachineID, Args) ->
     Deadline = mg_core_deadline:from_timeout(3000),
     MgOptions = events_machine_options(Options),
     mg_core_events_machine:start(MgOptions, MachineID, encode(Args), <<>>, Deadline).
 
--spec call(options(), machinegun_core:id(), term()) ->
+-spec call(options(), mg_core:id(), term()) ->
     term().
 call(Options, MachineID, Args) ->
     HRange = {undefined, undefined, forward},
@@ -280,7 +280,7 @@ call(Options, MachineID, Args) ->
     Result = mg_core_events_machine:call(MgOptions, {id, MachineID}, encode(Args), HRange, <<>>, Deadline),
     decode(Result).
 
--spec get_history(options(), machinegun_core:id()) ->
+-spec get_history(options(), mg_core:id()) ->
     ok.
 get_history(Options, MachineID) ->
     HRange = {undefined, undefined, forward},

@@ -356,8 +356,8 @@ lists_compact(List) ->
         List
     ).
 
--spec concatenate_namespaces(machinegun_core:ns(), machinegun_core:ns()) ->
-    machinegun_core:ns().
+-spec concatenate_namespaces(mg_core:ns(), mg_core:ns()) ->
+    mg_core:ns().
 concatenate_namespaces(NamespaceA, NamespaceB) ->
     <<NamespaceA/binary, "_", NamespaceB/binary>>.
 

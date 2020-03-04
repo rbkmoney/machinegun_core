@@ -40,7 +40,7 @@
 }.
 
 -type name() :: atom().
--type id() :: {name(), machinegun_core:ns()}.
+-type id() :: {name(), mg_core:ns()}.
 
 -type task_id() :: mg_core_queue_task:id().
 -type task() :: mg_core_queue_task:task().

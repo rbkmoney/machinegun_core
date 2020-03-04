@@ -33,8 +33,8 @@
 -type request_context() :: term(). % handler specific
 
 -type machine_event() :: #{
-    ns    => machinegun_core:ns(),
-    id    => machinegun_core:id(),
+    ns    => mg_core:ns(),
+    id    => mg_core:id(),
     event => mg_core_events:event()
 }.
 
@@ -88,7 +88,7 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
             erlang:throw({logic, {invalid_modernized_version, Versions}})
     end.
 
--spec store_event(mg_core_events_machine:options(), machinegun_core:id(), mg_core_events:event()) ->
+-spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) ->
     ok.
 store_event(Options, ID, Event) ->
     {Key, Value} = mg_core_events:add_machine_id(ID, mg_core_events:event_to_kv(Event)),
@@ -115,7 +115,7 @@ is_outdated_event(#{current_format_version := Current}, #{body := Body}) ->
 get_format_version({Metadata, _}) ->
     maps:get(format_version, Metadata, undefined).
 
--spec event_to_machine_event(machinegun_core:ns(), machinegun_core:id(), mg_core_events:event()) ->
+-spec event_to_machine_event(mg_core:ns(), mg_core:id(), mg_core_events:event()) ->
     machine_event().
 event_to_machine_event(NS, ID, Event) ->
     #{ns => NS, id => ID, event => Event}.

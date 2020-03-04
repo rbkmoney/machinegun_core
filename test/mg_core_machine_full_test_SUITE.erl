@@ -148,12 +148,12 @@ do_action(Options, ID, Seq, Action) ->
     end.
 
 -spec req_ctx(id(), seq()) ->
-    machinegun_core:request_context().
+    mg_core:request_context().
 req_ctx(ID, Seq) ->
     [ID, Seq].
 
 -spec id(id()) ->
-    machinegun_core:id().
+    mg_core:id().
 id(ID) ->
     erlang:integer_to_binary(ID).
 
@@ -199,7 +199,7 @@ pool_child_spec(_Options, Name) ->
         start => {?MODULE, start, []}
     }.
 
--spec process_machine(_Options, machinegun_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
+-spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
 process_machine(_, _, {init, FlowAction}, _, ReqCtx, _Deadline, AS) ->
     {{reply, ok}, map_flow_action(FlowAction, ReqCtx), AS};
@@ -210,7 +210,7 @@ process_machine(_, _, {call, FlowAction}, _, ReqCtx, _Deadline, AS) ->
 process_machine(_, _, {repair, FlowAction}, _, ReqCtx, _Deadline, AS) ->
     {{reply, ok}, map_flow_action(FlowAction, ReqCtx), AS}.
 
--spec map_flow_action(flow_action(), machinegun_core:request_context()) ->
+-spec map_flow_action(flow_action(), mg_core:request_context()) ->
     mg_core_machine:processor_flow_action().
 map_flow_action(sleep , _  ) -> sleep;
 % map_flow_action(wait  , Ctx) -> {wait, 99, Ctx, 5000};

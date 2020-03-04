@@ -13,7 +13,7 @@
 %%% See the License for the specific language governing permissions and
 %%% limitations under the License.
 %%%
--module(machinegun_core).
+-module(mg_core).
 
 %% API
 -export_type([ns/0]).

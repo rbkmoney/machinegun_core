@@ -124,7 +124,7 @@ pool_child_spec(_Options, Name) ->
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, MachineState) -> Result when
     Options :: any(),
-    ID :: machinegun_core:id(),
+    ID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
     ReqCtx :: mg_core_machine:request_context(),
@@ -190,7 +190,7 @@ stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options(machinegun_core:ns()) ->
+-spec automaton_options(mg_core:ns()) ->
     mg_core_machine:options().
 automaton_options(NS) ->
     Scheduler = #{
@@ -211,7 +211,7 @@ automaton_options(NS) ->
         }
     }.
 
--spec automaton_options_wo_shedulers(machinegun_core:ns()) ->
+-spec automaton_options_wo_shedulers(mg_core:ns()) ->
     mg_core_machine:options().
 automaton_options_wo_shedulers(NS) ->
     #{

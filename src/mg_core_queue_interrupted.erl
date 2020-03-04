@@ -28,7 +28,7 @@
 
 -type milliseconds() :: non_neg_integer().
 -type options() :: #{
-    namespace := machinegun_core:ns(),
+    namespace := mg_core:ns(),
     scheduler_name := mg_core_scheduler:name(),
     pulse := mg_core_pulse:handler(),
     machine := mg_core_machine:options(),
@@ -46,7 +46,7 @@
 
 %% Internal types
 
--type task_id() :: machinegun_core:id().
+-type task_id() :: mg_core:id().
 -type task_payload() :: #{}.
 -type task() :: mg_core_queue_task:task(task_id(), task_payload()).
 -type scan_delay() :: mg_core_queue_scanner:scan_delay().

@@ -81,11 +81,11 @@
 -type state_change   () :: {aux_state(), [mg_core_events:body()]}.
 -type signal         () :: {init, term()} | timeout | {repair, term()}.
 -type aux_state      () :: mg_core_events:content().
--type request_context() :: machinegun_core:request_context().
+-type request_context() :: mg_core:request_context().
 
 -type machine() :: #{
-    ns            => machinegun_core:ns(),
-    id            => machinegun_core:id(),
+    ns            => mg_core:ns(),
+    id            => mg_core:id(),
     history       => [mg_core_events:event()],
     history_range => mg_core_events:history_range(),
     aux_state     => aux_state(),
@@ -110,9 +110,9 @@
 -type timeout_    () :: non_neg_integer().
 -type deadline    () :: mg_core_deadline:deadline().
 
--type ref() :: {id, machinegun_core:id()} | {tag, mg_core_machine_tags:tag()}.
+-type ref() :: {id, mg_core:id()} | {tag, mg_core_machine_tags:tag()}.
 -type options() :: #{
-    namespace                  => machinegun_core:ns(),
+    namespace                  => mg_core:ns(),
     events_storage             => storage_options(),
     processor                  => mg_core_utils:mod_opts(),
     tagging                    => mg_core_machine_tags:options(),
@@ -149,7 +149,7 @@ start_link(Options) ->
 
 -define(default_deadline, mg_core_deadline:from_timeout(5000)).
 
--spec start(options(), machinegun_core:id(), term(), request_context(), deadline()) ->
+-spec start(options(), mg_core:id(), term(), request_context(), deadline()) ->
     ok.
 start(Options, ID, Args, ReqCtx, Deadline) ->
     HRange = {undefined, undefined, forward},
@@ -205,7 +205,7 @@ get_machine(Options, Ref, HRange) ->
     ),
     machine(Options, ID, EffectiveState, ExtraEvents, HRange).
 
--spec remove(options(), machinegun_core:id(), request_context(), deadline()) ->
+-spec remove(options(), mg_core:id(), request_context(), deadline()) ->
     ok.
 remove(Options, ID, ReqCtx, Deadline) ->
     mg_core_machine:call(machine_options(Options), ID, remove, ReqCtx, Deadline).
@@ -213,7 +213,7 @@ remove(Options, ID, ReqCtx, Deadline) ->
 %%
 
 -spec ref2id(options(), ref()) ->
-    machinegun_core:id() | no_return().
+    mg_core:id() | no_return().
 ref2id(_, {id, ID}) ->
     ID;
 ref2id(Options, {tag, Tag}) ->
@@ -250,7 +250,7 @@ processor_child_spec(Options) ->
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
     Options :: options(),
-    ID :: machinegun_core:id(),
+    ID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
     ReqCtx :: request_context(),
@@ -273,7 +273,7 @@ process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) ->
 
 -spec process_machine_(Options, ID, Impact, PCtx, ReqCtx, Deadline, State) -> Result when
     Options :: options(),
-    ID :: machinegun_core:id(),
+    ID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact() | {'timeout', _},
     PCtx :: mg_core_machine:processing_context(),
     ReqCtx :: request_context(),
@@ -356,7 +356,7 @@ process_machine_std(Options, ReqCtx, Deadline, Subj, Args , Machine, EventsRange
     NewState = add_delayed_actions(DelayedActions, State),
     {noreply, {continue, Reply}, NewState}.
 
--spec add_tag(options(), machinegun_core:id(), request_context(), deadline(), undefined | mg_core_machine_tags:tag()) ->
+-spec add_tag(options(), mg_core:id(), request_context(), deadline(), undefined | mg_core_machine_tags:tag()) ->
     ok.
 add_tag(_, _, _, _, undefined) ->
     ok;
@@ -390,7 +390,7 @@ split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEve
             {State#{events => Events}, []}
     end.
 
--spec store_events(options(), machinegun_core:id(), request_context(), [mg_core_events:event()]) ->
+-spec store_events(options(), mg_core:id(), request_context(), [mg_core_events:event()]) ->
     ok.
 store_events(Options, ID, _, Events) ->
     lists:foreach(
@@ -401,7 +401,7 @@ store_events(Options, ID, _, Events) ->
     ).
 
 
--spec push_events_to_event_sinks(options(), machinegun_core:id(), request_context(), deadline(), [mg_core_events:event()]) ->
+-spec push_events_to_event_sinks(options(), mg_core:id(), request_context(), deadline(), [mg_core_events:event()]) ->
     ok.
 push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events) ->
     Namespace = get_option(namespace, Options),
@@ -448,13 +448,13 @@ apply_delayed_timer_actions_to_state(#{new_timer := unchanged}, State) ->
 apply_delayed_timer_actions_to_state(#{new_timer := Timer}, State) ->
     State#{timer := Timer}.
 
--spec emit_action_beats(options(), machinegun_core:id(), request_context(), delayed_actions()) ->
+-spec emit_action_beats(options(), mg_core:id(), request_context(), delayed_actions()) ->
     ok.
 emit_action_beats(Options, ID, ReqCtx, DelayedActions) ->
     ok = emit_timer_action_beats(Options, ID, ReqCtx, DelayedActions),
     ok.
 
--spec emit_timer_action_beats(options(), machinegun_core:id(), request_context(), delayed_actions()) ->
+-spec emit_timer_action_beats(options(), mg_core:id(), request_context(), delayed_actions()) ->
     ok.
 emit_timer_action_beats(_Options, _ID, _ReqCtx, #{new_timer := unchanged}) ->
     ok;
@@ -579,7 +579,7 @@ get_option(Subj, Options) ->
 
 %%
 
--spec machine(options(), machinegun_core:id(), state(), [mg_core_events:event()], mg_core_events:history_range()) ->
+-spec machine(options(), mg_core:id(), state(), [mg_core_events:event()], mg_core_events:history_range()) ->
     machine().
 machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
     #{
@@ -630,7 +630,7 @@ find_event_getter([{_, Getter}], _) ->
     % сознательно игнорируем последний range
     Getter.
 
--spec storage_event_getter(options(), machinegun_core:id()) ->
+-spec storage_event_getter(options(), mg_core:id()) ->
     event_getter().
 storage_event_getter(Options, ID) ->
     StorageOptions = events_storage_options(Options),
@@ -767,12 +767,12 @@ opaque_to_state([4, EventsRange, AuxState, DelayedActions, Timer, Events]) ->
     }.
 
 
--spec events_to_kvs(machinegun_core:id(), [mg_core_events:event()]) ->
+-spec events_to_kvs(mg_core:id(), [mg_core_events:event()]) ->
     [mg_core_storage:kv()].
 events_to_kvs(MachineID, Events) ->
     mg_core_events:add_machine_id(MachineID, mg_core_events:events_to_kvs(Events)).
 
--spec kv_to_event(machinegun_core:id(), mg_core_storage:kv()) ->
+-spec kv_to_event(mg_core:id(), mg_core_storage:kv()) ->
     mg_core_events:event().
 kv_to_event(MachineID, Kv) ->
     mg_core_events:kv_to_event(mg_core_events:remove_machine_id(MachineID, Kv)).

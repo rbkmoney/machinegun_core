@@ -38,15 +38,15 @@
 %% API
 %%
 -type event_body() :: #{
-    source_ns => machinegun_core:ns(),
-    source_id => machinegun_core:id(),
+    source_ns => mg_core:ns(),
+    source_id => mg_core:id(),
     event     => mg_core_events:event()
 }.
 -type event() :: mg_core_events:event(event_body()).
 -type options() :: #{
     name                       := atom(),
-    namespace                  := machinegun_core:ns(),
-    machine_id                 := machinegun_core:id(),
+    namespace                  := mg_core:ns(),
+    machine_id                 := mg_core:id(),
     storage                    := storage_options(),
     worker                     := mg_core_workers_manager:options(),
     pulse                      := mg_core_pulse:handler(),
@@ -54,7 +54,7 @@
     default_processing_timeout := timeout()
 }.
 -type ns_options() :: #{
-    namespace                  := machinegun_core:ns(),
+    namespace                  := mg_core:ns(),
     storage                    := storage_options(),
     worker                     := mg_core_workers_manager:options(),
     pulse                      := mg_core_pulse:handler(),
@@ -86,10 +86,10 @@ start_link(Options) ->
     ).
 
 
--spec add_events(options(), machinegun_core:ns(), machinegun_core:id(), [mg_core_events:event()], ReqCtx, mg_core_deadline:deadline()) ->
+-spec add_events(options(), mg_core:ns(), mg_core:id(), [mg_core_events:event()], ReqCtx, mg_core_deadline:deadline()) ->
     ok
 when
-    ReqCtx:: machinegun_core:request_context()
+    ReqCtx:: mg_core:request_context()
 .
 add_events(#{machine_id := EventSinkID} = Options, SourceNS, SourceMachineID, Events, ReqCtx, Deadline) ->
     NSOptions = maps:without([machine_id, name], Options),
@@ -102,7 +102,7 @@ add_events(#{machine_id := EventSinkID} = Options, SourceNS, SourceMachineID, Ev
             undefined
         ).
 
--spec get_history(ns_options(), machinegun_core:id(), mg_core_events:history_range()) ->
+-spec get_history(ns_options(), mg_core:id(), mg_core_events:history_range()) ->
     [event()].
 get_history(Options, EventSinkID, HistoryRange) ->
     #{events_range := EventsRange} = get_state(Options, EventSinkID),
@@ -117,7 +117,7 @@ get_history(Options, EventSinkID, HistoryRange) ->
     ),
     kvs_to_sink_events(EventSinkID, Kvs).
 
--spec repair(ns_options(), machinegun_core:id(), machinegun_core:request_context(), mg_core_deadline:deadline()) ->
+-spec repair(ns_options(), mg_core:id(), mg_core:request_context(), mg_core_deadline:deadline()) ->
     ok.
 repair(Options, EventSinkID, ReqCtx, Deadline) ->
     mg_core_machine:repair(machine_options(Options), EventSinkID, undefined, ReqCtx, Deadline).
@@ -131,10 +131,10 @@ repair(Options, EventSinkID, ReqCtx, Deadline) ->
 
 -spec process_machine(Options, EventSinkID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
     Options :: ns_options(),
-    EventSinkID :: machinegun_core:id(),
+    EventSinkID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
-    ReqCtx :: machinegun_core:request_context(),
+    ReqCtx :: mg_core:request_context(),
     Deadline :: mg_core_deadline:deadline(),
     PackedState :: mg_core_machine:machine_state(),
     Result :: mg_core_machine:processor_result().
@@ -147,7 +147,7 @@ process_machine(Options, EventSinkID, Impact, _PCtx, _ReqCtx, _Deadline, PackedS
     NewState = process_machine_(Options, EventSinkID, Impact, State),
     {{reply, ok}, sleep, state_to_opaque(NewState)}.
 
--spec process_machine_(ns_options(), machinegun_core:id(), mg_core_machine:processor_impact(), state()) ->
+-spec process_machine_(ns_options(), mg_core:id(), mg_core_machine:processor_impact(), state()) ->
     state().
 process_machine_(_, _, {init, undefined}, State) ->
     State;
@@ -160,7 +160,7 @@ process_machine_(Options, EventSinkID, {call, {add_events, SourceNS, SourceMachi
 
 %%
 
--spec store_sink_events(ns_options(), machinegun_core:id(), [event()]) ->
+-spec store_sink_events(ns_options(), mg_core:id(), [event()]) ->
     ok.
 store_sink_events(Options, EventSinkID, SinkEvents) ->
     lists:foreach(
@@ -170,7 +170,7 @@ store_sink_events(Options, EventSinkID, SinkEvents) ->
         SinkEvents
     ).
 
--spec store_event(ns_options(), machinegun_core:id(), event()) ->
+-spec store_event(ns_options(), mg_core:id(), event()) ->
     ok.
 store_event(Options, EventSinkID, SinkEvent) ->
     {Key, Value} = sink_event_to_kv(EventSinkID, SinkEvent),
@@ -178,7 +178,7 @@ store_event(Options, EventSinkID, SinkEvent) ->
             undefined, Value, []),
     ok.
 
--spec get_events_keys(machinegun_core:id(), mg_core_events:events_range(), mg_core_events:history_range()) ->
+-spec get_events_keys(mg_core:id(), mg_core_events:events_range(), mg_core_events:history_range()) ->
     [mg_core_storage:key()].
 get_events_keys(EventSinkID, EventsRange, HistoryRange) ->
     [
@@ -187,7 +187,7 @@ get_events_keys(EventSinkID, EventsRange, HistoryRange) ->
         EventID <- mg_core_events:get_event_ids(EventsRange, HistoryRange)
     ].
 
--spec get_state(ns_options(), machinegun_core:id()) ->
+-spec get_state(ns_options(), mg_core:id()) ->
     state().
 get_state(Options, EventSinkID) ->
     try
@@ -220,14 +220,14 @@ events_storage_options(#{namespace := NS, events_storage := StorageOptions}) ->
 
 %%
 
--spec generate_sink_events(machinegun_core:ns(), machinegun_core:id(), [mg_core_events:event()], state()) ->
+-spec generate_sink_events(mg_core:ns(), mg_core:id(), [mg_core_events:event()], state()) ->
     {[event()], state()}.
 generate_sink_events(SourceNS, SourceMachineID, Events, State=#{events_range:=EventsRange}) ->
     Bodies = [generate_sink_event_body(SourceNS, SourceMachineID, Event) || Event <- Events],
     {SinkEvents, NewEventsRange} = mg_core_events:generate_events_with_range(Bodies, EventsRange),
     {SinkEvents, State#{events_range := NewEventsRange}}.
 
--spec generate_sink_event_body(machinegun_core:ns(), machinegun_core:id(), mg_core_events:event()) ->
+-spec generate_sink_event_body(mg_core:ns(), mg_core:id(), mg_core_events:event()) ->
     event_body().
 generate_sink_event_body(SourceNS, SourceMachineID, Event) ->
     #{
@@ -266,12 +266,12 @@ opaque_to_sink_event_body(_Vsn, [1, SourceNS, SourceMachineID, Event]) ->
         event     => mg_core_events:opaque_to_event(Event)
     }.
 
--spec sink_event_to_kv(machinegun_core:id(), event()) ->
+-spec sink_event_to_kv(mg_core:id(), event()) ->
     mg_core_storage:kv().
 sink_event_to_kv(EventSinkID, Event) ->
     mg_core_events:add_machine_id(EventSinkID, mg_core_events:event_to_kv(Event, fun sink_event_body_to_opaque/2)).
 
--spec kvs_to_sink_events(machinegun_core:id(), [mg_core_storage:kv()]) ->
+-spec kvs_to_sink_events(mg_core:id(), [mg_core_storage:kv()]) ->
     [event()].
 kvs_to_sink_events(EventSinkID, Kvs) ->
     mg_core_events:kvs_to_events(mg_core_events:remove_machine_id(EventSinkID, Kvs), fun opaque_to_sink_event_body/2).
