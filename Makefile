@@ -42,14 +42,11 @@ CALL_ANYWHERE := \
 	lint \
 	dialyze \
 	start \
-	devrel \
-	release \
 	clean \
 	distclean \
-	test_configurator \
 
 
-CALL_W_CONTAINER := $(CALL_ANYWHERE) test dev_test test_configurator
+CALL_W_CONTAINER := $(CALL_ANYWHERE) test dev_test
 
 all: compile
 
@@ -65,9 +62,6 @@ $(SUBTARGETS): %/.git: %
 
 submodules: $(SUBTARGETS)
 
-upgrade-proto:
-	$(REBAR) upgrade mg_proto
-
 compile: submodules
 	$(REBAR) compile
 
@@ -79,12 +73,6 @@ lint:
 
 dialyze:
 	$(REBAR) dialyzer
-
-devrel: submodules
-	$(REBAR) release
-
-release:
-	$(REBAR) as prod release
 
 clean:
 	$(REBAR) clean
@@ -98,11 +86,3 @@ test: submodules
 	$(REBAR) ct
 
 dev_test: xref lint test
-
-test_configurator:
-	$(MAKE) $(FILE_PERMISSIONS)
-	ERL_LIBS=_build/default/lib ./rel_scripts/configurator.escript config/config.yaml config
-
-FILE_PERMISSIONS = $(patsubst %,%.target,$(wildcard config/*._perms))
-$(FILE_PERMISSIONS): config/%._perms.target: config/%._perms
-	chmod $$(cat $^) config/$*
