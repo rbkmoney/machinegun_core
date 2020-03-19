@@ -245,11 +245,22 @@ apply_mod_opts_if_defined(ModOpts, Function, Default) ->
 apply_mod_opts_if_defined(ModOpts, Function, Default, Args) ->
     {Mod, Arg} = separate_mod_opts(ModOpts),
     FunctionArgs = [Arg | Args],
+    ok = maybe_load_module(Mod),
     case erlang:function_exported(Mod, Function, length(FunctionArgs)) of
         true ->
             erlang:apply(Mod, Function, FunctionArgs);
         false ->
             Default
+    end.
+
+-spec maybe_load_module(module()) ->
+    ok.
+maybe_load_module(Mod) ->
+    case code:ensure_loaded(Mod) of
+        {module, Mod} ->
+            ok;
+        {error, Reason} ->
+            logger:warning("An error occured, while loading module ~p, reason: ~p", [Mod, Reason])
     end.
 
 -spec separate_mod_opts(mod_opts()) ->
