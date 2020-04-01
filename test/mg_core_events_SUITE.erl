@@ -81,4 +81,4 @@ range_missing_params_test(_C) ->
 -spec get_event_ids(mg_core_events:events_range(), mg_core_events:history_range()) ->
     [mg_core_events:id()].
 get_event_ids(R, HRange) ->
-    mg_core_events:enumerate_range(mg_core_events:cull_range(R, HRange)).
+    mg_core_dirange:enumerate(mg_core_events:cull_range(R, HRange)).
