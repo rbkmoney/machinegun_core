@@ -29,12 +29,12 @@
 %% API
 %%
 -type beat() ::
-    % Таймер
+    % Timer
       #mg_core_timer_lifecycle_created{}
     | #mg_core_timer_lifecycle_rescheduled{}
     | #mg_core_timer_lifecycle_rescheduling_error{}
     | #mg_core_timer_lifecycle_removed{}
-    % Планировщик
+    % Scheduler handling
     | #mg_core_scheduler_task_add_error{}
     | #mg_core_scheduler_search_error{}
     | #mg_core_scheduler_task_error{}
@@ -42,10 +42,10 @@
     | #mg_core_scheduler_task_started{}
     | #mg_core_scheduler_task_finished{}
     | #mg_core_scheduler_quota_reserved{}
-    % Обработка таймера
+    % Timer handling
     | #mg_core_timer_process_started{}
     | #mg_core_timer_process_finished{}
-    % Состояние процесса машины
+    % Machine process state
     | #mg_core_machine_lifecycle_created{}
     | #mg_core_machine_lifecycle_removed{}
     | #mg_core_machine_lifecycle_loaded{}
@@ -54,14 +54,23 @@
     | #mg_core_machine_lifecycle_failed{}
     | #mg_core_machine_lifecycle_loading_error{}
     | #mg_core_machine_lifecycle_transient_error{}
-    % Обработка запроса машиной
+    % Machine call handling
     | #mg_core_machine_process_started{}
     | #mg_core_machine_process_finished{}
     | #mg_core_machine_process_transient_error{}
-    % Обслуживание обработчиков машин
+    % Machine worker handling
     | #mg_core_worker_call_attempt{}
     | #mg_core_worker_start_attempt{}
-    % Операции events_sink
+    % Storage calls
+    | #mg_core_storage_get_start{}
+    | #mg_core_storage_get_finish{}
+    | #mg_core_storage_put_start{}
+    | #mg_core_storage_put_finish{}
+    | #mg_core_storage_search_start{}
+    | #mg_core_storage_search_finish{}
+    | #mg_core_storage_delete_start{}
+    | #mg_core_storage_delete_finish{}
+    % Event sink operations
     | #mg_core_events_sink_kafka_sent{}.
 
 -type handler() :: mg_core_utils:mod_opts() | undefined.
