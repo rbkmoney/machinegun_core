@@ -242,7 +242,7 @@ sidecar_child_spec(Options, ChildID) ->
 %% logging
 %%
 
--spec emit_beat_start(mg_storage:request(), storage_options()) -> ok.
+-spec emit_beat_start(mg_core_storage:request(), storage_options()) -> ok.
 emit_beat_start({get, _}, #{pulse := Handler, name := Name}) ->
     ok = mg_core_pulse:handle_beat(Handler, #mg_core_storage_get_start{
         name = Name
@@ -260,7 +260,7 @@ emit_beat_start({delete, _, _}, #{pulse := Handler, name := Name}) ->
         name = Name
     }).
 
--spec emit_beat_finish(mg_storage:request(), storage_options(), duration()) -> ok.
+-spec emit_beat_finish(mg_core_storage:request(), storage_options(), duration()) -> ok.
 emit_beat_finish({get, _}, #{pulse := Handler, name := Name}, Duration) ->
     ok = mg_core_pulse:handle_beat(Handler, #mg_core_storage_get_finish{
         name = Name,
