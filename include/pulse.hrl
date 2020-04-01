@@ -197,6 +197,45 @@
     retry_action :: {wait, timeout(), mg_core_retry:strategy()} | finish
 }).
 
+%% Storage operations
+%% Duration is in native units
+
+-record(mg_core_storage_get_start, {
+    name :: mg_core_storage:name()
+}).
+
+-record(mg_core_storage_get_finish, {
+    name :: mg_core_storage:name(),
+    duration :: non_neg_integer()
+}).
+
+-record(mg_core_storage_put_start, {
+    name :: mg_core_storage:name()
+}).
+
+-record(mg_core_storage_put_finish, {
+    name :: mg_core_storage:name(),
+    duration :: non_neg_integer()
+}).
+
+-record(mg_core_storage_search_start, {
+    name :: mg_core_storage:name()
+}).
+
+-record(mg_core_storage_search_finish, {
+    name :: mg_core_storage:name(),
+    duration :: non_neg_integer()
+}).
+
+-record(mg_core_storage_delete_start, {
+    name :: mg_core_storage:name()
+}).
+
+-record(mg_core_storage_delete_finish, {
+    name :: mg_core_storage:name(),
+    duration :: non_neg_integer()
+}).
+
 %% Workers management
 
 -record(mg_core_worker_call_attempt, {

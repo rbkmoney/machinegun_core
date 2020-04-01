@@ -40,12 +40,15 @@
 -export([is_alive      /2]).
 
 %% Types
+%% FIXME: some of these are listed as optional (=>)
+%%        whereas later in the code they are rigidly matched on (:=)
+%%        fixed for name and pulse
 -type options() :: #{
-    name                    => name(),
+    name                    := name(),
+    pulse                   := mg_core_pulse:handler(),
     registry                => mg_core_procreg:options(),
     message_queue_len_limit => queue_limit(),
     worker_options          => mg_core_worker:options(), % all but `registry`
-    pulse                   => mg_core_pulse:handler(),
     sidecar                 => mg_core_utils:mod_opts()
 }.
 -type queue_limit() :: non_neg_integer().

@@ -38,6 +38,8 @@
 -export([indexes_test_with_limits/1]).
 -export([stress_test             /1]).
 
+-export([handle_beat/2]).
+
 %%
 %% tests descriptions
 %%
@@ -320,6 +322,7 @@ stop_wait(Pid, Reason, Timeout) ->
 storage_options(riak, Namespace) ->
     {mg_core_storage_riak, #{
         name         => storage,
+        pulse        => ?MODULE,
         host         => "riakdb",
         port         => 8087,
         bucket       => Namespace,
@@ -336,7 +339,8 @@ storage_options(riak, Namespace) ->
     }};
 storage_options(memory, _) ->
     {mg_core_storage_memory, #{
-        name => storage
+        pulse => ?MODULE,
+        name  => storage
     }}.
 
 -spec start_storage(mg_core_storage:options()) ->
@@ -354,3 +358,8 @@ start_storage(Options) ->
 stop_storage(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
+
+-spec handle_beat(_, mg_core_pulse:beat()) ->
+    ok.
+handle_beat(_, Beat) ->
+    ct:pal("~p", [Beat]).
