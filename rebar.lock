@@ -10,7 +10,7 @@
  {<<"genlib">>,
   {git,"https://github.com/rbkmoney/genlib",
        {ref,"eb346c226b80337876d1a93b7838614cdcce5e5a"}},
-  1},
+  0},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.8.0">>},0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.15.2">>},1},
  {<<"hamcrest">>,
