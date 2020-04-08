@@ -38,7 +38,7 @@ services:
       - kafka3
 
   riakdb:
-    image: dr.rbkmoney.com/basho/riak-kv:ubuntu-2.1.4-1
+    image: basho/riak-kv:ubuntu-2.2.3
     environment:
       - CLUSTER_NAME=riakkv
     labels:
@@ -48,7 +48,7 @@ services:
       - schemas:/etc/riak/schemas
   member1:
     &member-node
-    image: dr.rbkmoney.com/basho/riak-kv:ubuntu-2.1.4-1
+    image: basho/riak-kv:ubuntu-2.2.3
     labels:
       - "com.basho.riak.cluster.name=riakkv"
     links:
