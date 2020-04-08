@@ -451,7 +451,7 @@ decode(Value) ->
 
 %% Pulse handler
 
--include_lib("mg/include/pulse.hrl").
+-include("pulse.hrl").
 
 -spec handle_beat(_, mg_core_pulse:beat()) ->
     ok.
