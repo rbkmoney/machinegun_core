@@ -4,8 +4,8 @@ log
 erl_crash.dump
 .tags*
 *.sublime-workspace
+.vscode/
 .DS_Store
-*~
 \#*
 .\#*
 .tags*

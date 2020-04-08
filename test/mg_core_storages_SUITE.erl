@@ -33,6 +33,7 @@
 
 %% base group tests
 -export([base_test               /1]).
+-export([batch_test              /1]).
 -export([indexes_test            /1]).
 -export([key_length_limit_test    /1]).
 -export([indexes_test_with_limits/1]).
@@ -68,6 +69,7 @@ groups() ->
 tests() ->
     [
         base_test,
+        batch_test,
         % incorrect_context_test,
         indexes_test,
         key_length_limit_test,
@@ -129,6 +131,48 @@ base_test(ID, Options) ->
     undefined      = mg_core_storage:get   (Options, Key),
     ok.
 
+-spec batch_test(config()) ->
+    _.
+batch_test(C) ->
+    {Mod, StorageOpts} = storage_options(?config(storage_type, C), <<"batch_test">>),
+    Options = {Mod, StorageOpts#{bathing => #{concurrency_limit => 3}}},
+    Pid = start_storage(Options),
+    Keys = lists:map(fun genlib:to_binary/1, lists:seq(1, 10)),
+    Value = #{<<"hello">> => <<"world">>},
+
+    PutBatch = lists:foldl(
+        fun (Key, Batch) ->
+            mg_core_storage:add_batch_request({put, Key, undefined, Value, []}, Batch)
+        end,
+        mg_core_storage:new_batch(),
+        Keys
+    ),
+    PutResults = mg_core_storage:run_batch(Options, PutBatch),
+    Ctxs = lists:zipwith(
+        fun (Key, Result) ->
+            {{put, Key, undefined, Value, _}, Ctx} = Result,
+            Ctx
+        end,
+        Keys, PutResults
+    ),
+
+    GetBatch = lists:foldl(
+        fun (Key, Batch) ->
+            mg_core_storage:add_batch_request({get, Key}, Batch)
+        end,
+        mg_core_storage:new_batch(),
+        Keys
+    ),
+    GetResults = mg_core_storage:run_batch(Options, GetBatch),
+    _ = lists:zipwith3(
+        fun (Key, Ctx, Result) ->
+            {{get, Key}, {Ctx, Value}} = Result
+        end,
+        Keys, Ctxs, GetResults
+    ),
+
+    ok = stop_storage(Pid).
+
 -spec indexes_test(config()) ->
     _.
 indexes_test(C) ->
@@ -183,9 +227,16 @@ key_length_limit_test(C) ->
 
     {logic, {invalid_key, {too_small, _}}} =
         (catch mg_core_storage:get(Options, <<"">>)),
+    {logic, {invalid_key, {too_small, _}}} =
+        (catch mg_core_storage:add_batch_request({get, <<"">>}, mg_core_storage:new_batch())),
 
     {logic, {invalid_key, {too_small, _}}} =
         (catch mg_core_storage:put(Options, <<"">>, undefined, <<"test">>, [])),
+    {logic, {invalid_key, {too_small, _}}} =
+        (catch mg_core_storage:add_batch_request(
+            {put, <<"">>, undefined, <<"test">>, []},
+            mg_core_storage:new_batch())
+        ),
 
     _ = mg_core_storage:get(Options, binary:copy(<<"K">>, 1024)),
 
@@ -193,6 +244,11 @@ key_length_limit_test(C) ->
         (catch
             mg_core_storage:get(Options, binary:copy(<<"K">>, 1025))
         ),
+    {logic, {invalid_key, {too_big, _}}} =
+        (catch mg_core_storage:add_batch_request(
+            {get, binary:copy(<<"K">>, 1025)},
+            mg_core_storage:new_batch()
+        )),
 
     _ = mg_core_storage:put(
         Options,

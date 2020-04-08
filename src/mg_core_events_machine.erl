@@ -588,10 +588,10 @@ machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
         aux_state    := AuxState,
         timer        := Timer
     } = State,
-    RangeGetters = [RG ||
-        RG = {Range, _Getter} <- [
-            {compute_events_range(Events)      , extra_event_getter(Events)},
-            {compute_events_range(ExtraEvents) , extra_event_getter(ExtraEvents)},
+    Sources = [RS ||
+        RS = {Range, _Getter} <- [
+            {compute_events_range(Events)      , event_list_getter(Events)},
+            {compute_events_range(ExtraEvents) , event_list_getter(ExtraEvents)},
             {EventsRange                       , storage_event_getter(Options, ID)}
         ],
         Range /= undefined
@@ -599,55 +599,82 @@ machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
     #{
         ns            => Namespace,
         id            => ID,
-        history       => get_events(RangeGetters, EventsRange, HRange),
+        history       => get_events(Sources, EventsRange, HRange),
         history_range => HRange,
         aux_state     => AuxState,
         timer         => Timer
     }.
 
--type event_getter() :: fun((mg_core_events:id()) -> mg_core_events:event()).
--type range_getter() :: {mg_core_events:events_range(), event_getter()}.
+-type event_getter() :: fun((mg_core_events:events_range()) -> [mg_core_events:event()]).
+-type event_sources() :: [{mg_core_events:events_range(), event_getter()}, ...].
 
--spec get_events([range_getter(), ...], mg_core_events:events_range(), mg_core_events:history_range()) ->
+-spec get_events(event_sources(), mg_core_events:events_range(), mg_core_events:history_range()) ->
     [mg_core_events:event()].
-get_events(RangeGetters, EventsRange, HRange) ->
-    EventIDs = mg_core_events:get_event_ids(EventsRange, HRange),
-    genlib_pmap:map(
-        fun (EventID) ->
-            Getter = find_event_getter(RangeGetters, EventID),
-            Getter(EventID)
-        end,
-        EventIDs
-    ).
+get_events(Sources, EventsRange, HRange) ->
+    lists:flatten(gather_events(Sources, mg_core_events:intersect_range(EventsRange, HRange))).
 
--spec find_event_getter([range_getter(), ...], mg_core_events:id()) ->
-    event_getter().
-find_event_getter([{{First, Last}, Getter} | _], EventID) when First =< EventID, EventID =< Last ->
-    Getter;
-find_event_getter([_ | [_ | _] = Rest], EventID) ->
-    find_event_getter(Rest, EventID);
-find_event_getter([{_, Getter}], _) ->
-    % сознательно игнорируем последний range
-    Getter.
+-spec gather_events(event_sources(), mg_core_events:events_range()) ->
+    [mg_core_events:event() | [mg_core_events:event()]].
+gather_events([{AvailRange, Getter} | Sources], EvRange) ->
+    % NOTE
+    % We find out which part of `EvRange` is covered by current source (which is `Range`)
+    % and which parts are covered by other sources. In the most complex case there are three
+    % parts. For example:
+    % ```
+    % EvRange    = {1, 42}
+    % AvailRange = {35, 40}
+    % intersect(EvRange, AvailRange) = {
+    %     { 1, 34} = RL,
+    %     {35, 40} = Range,
+    %     {41, 42} = RR
+    % }
+    % ```
+    {RL, Range, RR} = mg_core_dirange:intersect(EvRange, AvailRange),
+    Events1 = case mg_core_dirange:size(RR) of
+        0 -> [];
+        _ -> gather_events(Sources, RR)
+    end,
+    Events2 = case mg_core_dirange:size(Range) of
+        0 -> Events1;
+        _ -> concat_events(Getter(Range), Events1)
+    end,
+    case mg_core_dirange:size(RL) of
+        0 -> Events2;
+        _ -> concat_events(gather_events(Sources, RL), Events2)
+    end;
+gather_events([], _EvRange) ->
+    [].
+
+-spec concat_events([mg_core_events:event()], [mg_core_events:event()]) ->
+    [mg_core_events:event() | [mg_core_events:event()]].
+concat_events(Events, []) ->
+    Events;
+concat_events(Events, Acc) ->
+    [Events | Acc].
 
 -spec storage_event_getter(options(), mg_core:id()) ->
     event_getter().
 storage_event_getter(Options, ID) ->
     StorageOptions = events_storage_options(Options),
-    fun (EventID) ->
-        Key = mg_core_events:add_machine_id(ID, mg_core_events:event_id_to_key(EventID)),
-        {_Context, Value} = mg_core_storage:get(StorageOptions, Key),
-        kv_to_event(ID, {Key, Value})
+    fun (Range) ->
+        Batch = mg_core_dirange:fold(
+            fun (EventID, Acc) ->
+                Key = mg_core_events:add_machine_id(ID, mg_core_events:event_id_to_key(EventID)),
+                mg_core_storage:add_batch_request({get, Key}, Acc)
+            end,
+            mg_core_storage:new_batch(),
+            Range
+        ),
+        [kv_to_event(ID, {Key, Value}) ||
+            {{get, Key}, {_Context, Value}} <- mg_core_storage:run_batch(StorageOptions, Batch)
+        ]
     end.
 
--spec extra_event_getter([mg_core_events:event()]) ->
+-spec event_list_getter([mg_core_events:event()]) ->
     event_getter().
-extra_event_getter(Events) ->
-    fun (EventID) ->
-        erlang:hd(lists:dropwhile(
-            fun (#{id := ID}) -> ID /= EventID end,
-            Events
-        ))
+event_list_getter(Events) ->
+    fun (Range) ->
+        mg_core_events:slice_events(Events, Range)
     end.
 
 -spec try_apply_delayed_actions(state()) ->
@@ -702,7 +729,7 @@ add_delayed_action(new_events_range, Range, DelayedActions) ->
 compute_events_range([]) ->
     undefined;
 compute_events_range([#{id := ID} | _] = Events) ->
-    {ID, ID + erlang:length(Events) - 1}.
+    mg_core_dirange:forward(ID, ID + erlang:length(Events) - 1).
 
 %%
 %% packer to opaque

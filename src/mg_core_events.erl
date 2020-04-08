@@ -31,7 +31,8 @@
 -export_type([format_version/0]).
 
 %% events ranges intersection
--export([get_event_ids/2]).
+-export([intersect_range/2]).
+-export([slice_events/2]).
 
 %% events generation
 -export([generate_events_with_range/2]).
@@ -93,46 +94,54 @@
 
 %% не очень удобно, что получилось 2 формата range'а
 %% надо подумать, как это исправить
--type events_range() :: {First::id(), Last::id()} | undefined.
+-type events_range() :: mg_core_dirange:dirange(id()).
 
 %%
 %% events ranges intersection
 %%
--spec get_event_ids(events_range(), history_range()) ->
-    [id()].
-get_event_ids(undefined, _) ->
-    [];
-get_event_ids(R0, {Ef, N, Direction}) ->
-    R1 = intersect_range(R0, Ef, Direction),
-    R2 = limit_range(R1, N, Direction),
-    enumerate_range(R2, Direction).
+-spec intersect_range(events_range(), history_range()) ->
+    events_range().
+intersect_range(R0, {Ef, N, Direction}) ->
+    R1 = orient_range(R0, Direction),
+    R2 = chop_range(R1, Ef),
+    R3 = limit_range(R2, N),
+    R3.
 
--spec intersect_range({id(), id()}, undefined | id(), direction()) ->
-    {id(), id()}.
-intersect_range(R, undefined, _) ->
+-spec orient_range(events_range(), direction()) ->
+    events_range().
+orient_range(R, forward) ->
+    mg_core_dirange:align(R, mg_core_dirange:forward(1, 1));
+orient_range(R, backward) ->
+    mg_core_dirange:align(R, mg_core_dirange:backward(1, 1)).
+
+-spec chop_range(events_range(), _From :: id() | undefined) ->
+    events_range().
+chop_range(R0, undefined) ->
+    R0;
+chop_range(R0, Ef) when is_integer(Ef) ->
+    {_, R1} = mg_core_dirange:dissect(R0, Ef), R1.
+
+-spec limit_range(events_range(), undefined | non_neg_integer()) ->
+    events_range().
+limit_range(R, undefined) ->
     R;
-intersect_range({A, B}, Ef, forward) ->
-    {erlang:max(A, Ef + 1), B};
-intersect_range({A, B}, Ef, backward) ->
-    {A, erlang:min(B, Ef - 1)}.
+limit_range(R, N) ->
+    mg_core_dirange:limit(R, N).
 
--spec limit_range({id(), id()}, undefined | non_neg_integer(), direction()) ->
-    {id(), id()}.
-limit_range(R, undefined, _) ->
-    R;
-limit_range({A, B}, N, forward) ->
-    {A, min(A + N - 1, B)};
-limit_range({A, B}, N, backward) ->
-    {max(B - N + 1, A), B}.
-
--spec enumerate_range({id(), id()}, direction()) ->
-    [id()].
-enumerate_range({A, B}, _) when A > B ->
-    [];
-enumerate_range({A, B}, forward) ->
-    lists:seq(A, B, 1);
-enumerate_range({A, B}, backward) ->
-    lists:seq(B, A, -1).
+-spec slice_events([event()], events_range()) ->
+    [event()].
+slice_events(Events = [#{id := First} | _], Range) ->
+    D = mg_core_dirange:direction(Range),
+    case mg_core_dirange:bounds(Range) of
+        {A, B} when D == +1 ->
+            lists:sublist(Events, A - First + 1, B - A + 1);
+        {B, A} when D == -1 ->
+            lists:reverse(lists:sublist(Events, A - First + 1, B - A + 1));
+        undefined ->
+            []
+    end;
+slice_events([], _) ->
+    [].
 
 %%
 %% events generation
@@ -140,7 +149,7 @@ enumerate_range({A, B}, backward) ->
 -spec generate_events_with_range([body()], events_range()) ->
     {[event()], events_range()}.
 generate_events_with_range(EventsBodies, EventsRange) ->
-    {Events, NewLastEventID} = generate_events(EventsBodies, get_last_event_id(EventsRange)),
+    {Events, NewLastEventID} = generate_events(EventsBodies, mg_core_dirange:to(EventsRange)),
     {Events, update_events_range(EventsRange, NewLastEventID)}.
 
 -spec generate_events([body()], id() | undefined) ->
@@ -165,13 +174,6 @@ generate_event(EventBody, LastID) ->
         },
     {Event, ID}.
 
--spec get_last_event_id(events_range()) ->
-    id() | undefined.
-get_last_event_id(undefined) ->
-    undefined;
-get_last_event_id({_, LastID}) ->
-    LastID.
-
 -spec get_next_event_id(undefined | id()) ->
     id().
 get_next_event_id(undefined) ->
@@ -181,13 +183,11 @@ get_next_event_id(N) ->
 
 -spec update_events_range(events_range(), id() | undefined) ->
     events_range().
-update_events_range(undefined, undefined) ->
-    undefined;
-update_events_range(undefined, NewLastEventID) ->
-    {get_next_event_id(undefined), NewLastEventID};
-update_events_range({FirstEventID, _}, NewLastEventID) ->
-    {FirstEventID, NewLastEventID}.
-
+update_events_range(Range, undefined) ->
+    Range;
+update_events_range(Range, NewLastEventID) ->
+    FirstEventID = genlib:define(mg_core_dirange:from(Range), get_next_event_id(undefined)),
+    mg_core_dirange:forward(FirstEventID, NewLastEventID).
 
 %%
 %% packer to opaque
@@ -196,17 +196,13 @@ update_events_range({FirstEventID, _}, NewLastEventID) ->
 % TODO version
 -spec events_range_to_opaque(events_range()) ->
     mg_core_storage:opaque().
-events_range_to_opaque(undefined) ->
-    null;
-events_range_to_opaque({First, Last}) ->
-    [First, Last].
+events_range_to_opaque(Range) ->
+    mg_core_dirange:to_opaque(Range).
 
 -spec opaque_to_events_range(mg_core_storage:opaque()) ->
     events_range().
-opaque_to_events_range(null) ->
-    undefined;
-opaque_to_events_range([First, Last]) ->
-    {First, Last}.
+opaque_to_events_range(Opaque) ->
+    mg_core_dirange:from_opaque(Opaque).
 
 %% event
 -spec event_id_to_key(id()) ->
