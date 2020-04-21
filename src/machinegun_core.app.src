@@ -27,8 +27,7 @@
         riakc,
         pooler,
         brod,
-        msgpack,
-        rfc3339
+        msgpack
     ]},
     {env, []},
     {modules, []},
