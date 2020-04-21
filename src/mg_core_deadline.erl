@@ -77,8 +77,7 @@ default() ->
 -spec format(mg_core_deadline:deadline()) ->
     binary().
 format(Deadline) ->
-    {ok, Bin} = rfc3339:format(Deadline, millisecond),
-    Bin.
+    genlib_rfc3339:format_relaxed(Deadline, millisecond).
 
 %%
 
