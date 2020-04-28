@@ -320,7 +320,7 @@ max_result_opts(IndexLimit) ->
 -spec common_index_opts(options()) ->
     range_index_opts().
 common_index_opts(Options) ->
-    [{pagination_sort, true}, {timeout, get_option(request_timeout, Options)}].
+    [{pagination_sort, true}, {timeout, get_option(index_query_timeout, Options)}].
 
 %%
 %% packer
@@ -419,6 +419,7 @@ handle_riak_response_({error, Reason}) ->
 default_option(resolve_timeout) -> 5000;
 default_option(connect_timeout) -> 5000;
 default_option(request_timeout) -> 10000;
+default_option(index_query_timeout) -> 10000;
 default_option(r_options) -> [{r, quorum}, {pr, quorum}];
 default_option(w_options) -> [{w, quorum}, {pw, quorum}, {dw, quorum}];
 default_option(d_options) -> []. % ?
