@@ -63,18 +63,19 @@
 % from riakc
 % -type bucket() :: binary().
 -type options() :: #{
-    name            := mg_core_storage:name(),
-    host            := inet:ip_address() | inet:hostname() | binary(),
-    port            := inet:port_number(),
-    bucket          := bucket(),
-    pool_options    := pool_options(),
-    pulse           := mg_core_pulse:handler(),
-    resolve_timeout => timeout(),
-    connect_timeout => timeout(),
-    request_timeout => timeout(),
-    r_options       => _,
-    w_options       => _,
-    d_options       => _
+    name                := mg_core_storage:name(),
+    host                := inet:ip_address() | inet:hostname() | binary(),
+    port                := inet:port_number(),
+    bucket              := bucket(),
+    pool_options        := pool_options(),
+    pulse               := mg_core_pulse:handler(),
+    resolve_timeout     => timeout(),
+    connect_timeout     => timeout(),
+    request_timeout     => timeout(),
+    index_query_timeout => timeout(),
+    r_options           => _,
+    w_options           => _,
+    d_options           => _
 }.
 
 -type context() :: riakc_obj:vclock() | undefined.
