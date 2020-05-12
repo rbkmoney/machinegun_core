@@ -63,18 +63,19 @@
 % from riakc
 % -type bucket() :: binary().
 -type options() :: #{
-    name            := mg_core_storage:name(),
-    host            := inet:ip_address() | inet:hostname() | binary(),
-    port            := inet:port_number(),
-    bucket          := bucket(),
-    pool_options    := pool_options(),
-    pulse           := mg_core_pulse:handler(),
-    resolve_timeout => timeout(),
-    connect_timeout => timeout(),
-    request_timeout => timeout(),
-    r_options       => _,
-    w_options       => _,
-    d_options       => _
+    name                := mg_core_storage:name(),
+    host                := inet:ip_address() | inet:hostname() | binary(),
+    port                := inet:port_number(),
+    bucket              := bucket(),
+    pool_options        := pool_options(),
+    pulse               := mg_core_pulse:handler(),
+    resolve_timeout     => timeout(),
+    connect_timeout     => timeout(),
+    request_timeout     => timeout(),
+    index_query_timeout => timeout(),
+    r_options           => _,
+    w_options           => _,
+    d_options           => _
 }.
 
 -type context() :: riakc_obj:vclock() | undefined.
@@ -320,7 +321,7 @@ max_result_opts(IndexLimit) ->
 -spec common_index_opts(options()) ->
     range_index_opts().
 common_index_opts(Options) ->
-    [{pagination_sort, true}, {timeout, get_option(request_timeout, Options)}].
+    [{pagination_sort, true}, {timeout, get_option(index_query_timeout, Options)}].
 
 %%
 %% packer
@@ -419,6 +420,7 @@ handle_riak_response_({error, Reason}) ->
 default_option(resolve_timeout) -> 5000;
 default_option(connect_timeout) -> 5000;
 default_option(request_timeout) -> 10000;
+default_option(index_query_timeout) -> 10000;
 default_option(r_options) -> [{r, quorum}, {pr, quorum}];
 default_option(w_options) -> [{w, quorum}, {pw, quorum}, {dw, quorum}];
 default_option(d_options) -> []. % ?
