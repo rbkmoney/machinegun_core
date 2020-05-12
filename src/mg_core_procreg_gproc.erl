@@ -24,12 +24,13 @@
 -export([reg_name/2]).
 -export([select/2]).
 
--export([start_link/5]).
--export([call/4]).
+-export([start_link/2]).
+-export([call/2]).
 
 -type options() :: undefined.
+-type mfargs() :: mg_core_procreg:mfargs().
 
-%%
+%% API
 
 -spec ref(options(), mg_core_procreg:name()) ->
     mg_core_procreg:ref().
@@ -47,12 +48,12 @@ select(_Options, NamePattern) ->
     MatchSpec = [{{{n, l, NamePattern}, '_', '_'}, [], ['$$']}],
     [{Name, Pid} || [{n, l, Name}, Pid, _] <- gproc:select(MatchSpec)].
 
--spec start_link(options(), mg_core_procreg:reg_name(), module(), _Args, list()) ->
+-spec start_link(options(), mfargs()) ->
     mg_core_procreg:start_link_ret().
-start_link(_Options, RegName, Module, Args, Opts) ->
-    gen_server:start_link(RegName, Module, Args, Opts).
+start_link(_Options, {M, F, A}) ->
+    erlang:apply(M, F, A).
 
--spec call(options(), mg_core_procreg:ref(), _Call, timeout()) ->
+-spec call(options(), mfargs()) ->
     _Reply.
-call(_Options, Ref, Call, Timeout) ->
-    gen_server:call(Ref, Call, Timeout).
+call(_Options, {M, F, A}) ->
+    erlang:apply(M, F, A).

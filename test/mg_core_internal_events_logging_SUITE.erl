@@ -27,9 +27,7 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
--export([pool_child_spec/2, process_machine/7]).
-
--export([start/0]).
+-export([get_machine/4, process_machine/7]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -78,22 +76,19 @@ robust_handling(_C) ->
     Options = automaton_options(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, undefined, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, undefined, ?req_ctx, mg_core_deadline:default()),
     ok = timer:sleep(2000),
-    {retrying, _, _, _, _} = mg_core_machine:get_status(Options, ID),
+    {retrying, _, _, _, _} = mg_core_namespace:get_status(Options, ID),
 
     ok = stop_automaton(Pid).
 
 %%
 %% processor
 %%
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
-pool_child_spec(_Options, Name) ->
-    #{
-        id    => Name,
-        start => {?MODULE, start, []}
-    }.
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
 
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
@@ -105,15 +100,10 @@ process_machine(_, _, timeout, _, ?req_ctx, _, _State) ->
 %%
 %% utils
 %%
--spec start()->
-    ignore.
-start() ->
-    ignore.
-
--spec start_automaton(mg_core_machine:options()) ->
+-spec start_automaton(mg_core_namespace:start_options()) ->
     pid().
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
 
 -spec stop_automaton(pid()) ->
     ok.
@@ -122,17 +112,19 @@ stop_automaton(Pid) ->
     ok.
 
 -spec automaton_options(mg_core:ns()) ->
-    mg_core_machine:options().
+    mg_core_namespace:start_options().
 automaton_options(NS) ->
     #{
         namespace => NS,
         processor => ?MODULE,
         storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{registry => mg_core_procreg_gproc},
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
-        retries   => #{
-            timers         => {intervals, [1000, 1000, 1000, 1000, 1000]},
-            processor      => {intervals, [1]}
+        machine   => #{
+            retries   => #{
+                timers         => {intervals, [1000, 1000, 1000, 1000, 1000]},
+                processor      => {intervals, [1]}
+            }
         },
         schedulers => #{
             timers         => #{min_scan_delay => 1000},

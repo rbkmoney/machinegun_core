@@ -93,7 +93,7 @@ add_events_test(C) ->
 -spec get_unexisted_event_test(config()) ->
     _.
 get_unexisted_event_test(_C) ->
-    [] = mg_core_events_sink_machine:get_history(event_sink_options(), ?ES_ID, {42, undefined, forward}).
+    [] = mg_core_events_sink_machine:get_history(event_sink_options(), {42, undefined, forward}).
 
 -spec not_idempotent_add_get_events_test(config()) ->
     _.
@@ -125,7 +125,7 @@ add_events(C) ->
 get_history(_C) ->
     HRange = {undefined, undefined, forward},
     % _ = ct:pal("~p", [PreparedEvents]),
-    EventsSinkEvents = mg_core_events_sink_machine:get_history(event_sink_options(), ?ES_ID, HRange),
+    EventsSinkEvents = mg_core_events_sink_machine:get_history(event_sink_options(), HRange),
     [{ID, Body} || #{id := ID, body := Body} <- EventsSinkEvents].
 
 -spec start_event_sink(mg_core_events_sink_machine:ns_options()) ->
@@ -139,16 +139,15 @@ start_event_sink(Options) ->
     ).
 
 -spec event_sink_options() ->
-    mg_core_events_sink_machine:ns_options().
+    mg_core_events_sink_machine:start_options().
 event_sink_options() ->
     #{
         name                   => machine,
         machine_id             => ?ES_ID,
         namespace              => ?ES_ID,
         storage                => mg_core_storage_memory,
-        worker                 => #{registry => mg_core_procreg_gproc},
+        registry               => mg_core_procreg_gproc,
         pulse                  => ?MODULE,
-        duplicate_search_batch => 1000,
         events_storage         => mg_core_storage_memory
     }.
 

@@ -26,25 +26,26 @@
 -include_lib("machinegun_core/include/pulse.hrl").
 
 %% API
--export_type([options         /0]).
--export_type([storage_options /0]).
--export_type([ref             /0]).
--export_type([machine         /0]).
--export_type([tag_action      /0]).
--export_type([timer_action    /0]).
--export_type([complex_action  /0]).
--export_type([state_change    /0]).
--export_type([signal          /0]).
--export_type([signal_args     /0]).
--export_type([call_args       /0]).
--export_type([repair_args     /0]).
--export_type([signal_result   /0]).
--export_type([call_result     /0]).
--export_type([repair_result   /0]).
--export_type([request_context /0]).
+-export_type([start_options/0]).
+-export_type([call_options/0]).
+-export_type([storage_options/0]).
+-export_type([namespace_options/0]).
+-export_type([ref/0]).
+-export_type([machine/0]).
+-export_type([tag_action/0]).
+-export_type([timer_action/0]).
+-export_type([complex_action/0]).
+-export_type([state_change/0]).
+-export_type([signal/0]).
+-export_type([signal_args/0]).
+-export_type([call_args/0]).
+-export_type([repair_args/0]).
+-export_type([signal_result/0]).
+-export_type([call_result/0]).
+-export_type([repair_result/0]).
+-export_type([request_context/0]).
+-export_type([history_range/0]).
 
--export([child_spec   /2]).
--export([start_link   /1]).
 -export([start        /5]).
 -export([repair       /6]).
 -export([simple_repair/4]).
@@ -54,12 +55,14 @@
 
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
--export([processor_child_spec/1, process_machine/7]).
+-export([processor_child_spec/2]).
+-export([process_machine/7]).
+-export([get_machine/4]).
 
 %%
 %% API
 %%
--callback processor_child_spec(_Options) ->
+-callback processor_child_spec(_Options, term()) ->
     supervisor:child_spec() | undefined.
 -callback process_signal(_Options, request_context(), deadline(), signal_args()) ->
     signal_result().
@@ -67,7 +70,7 @@
     call_result().
 -callback process_repair(_Options, request_context(), deadline(), repair_args()) ->
     repair_result() | no_return().
--optional_callbacks([processor_child_spec/1]).
+-optional_callbacks([processor_child_spec/2]).
 
 %% calls, signals, get_gistory
 -type signal_args    () :: {signal(), machine()}.
@@ -82,18 +85,19 @@
 -type signal         () :: {init, term()} | timeout | {repair, term()}.
 -type aux_state      () :: mg_core_events:content().
 -type request_context() :: mg_core:request_context().
+-type history_range  () :: mg_core_events:history_range().
 
 -type machine() :: #{
     ns            => mg_core:ns(),
     id            => mg_core:id(),
     history       => [mg_core_events:event()],
-    history_range => mg_core_events:history_range(),
+    history_range => history_range(),
     aux_state     => aux_state(),
     timer         => int_timer()
 }.
 
 %% TODO сделать более симпатично
--type int_timer() :: {genlib_time:ts(), request_context(), pos_integer(), mg_core_events:history_range()}.
+-type int_timer() :: {genlib_time:ts(), request_context(), pos_integer(), history_range()}.
 
 %% actions
 -type complex_action  () :: #{
@@ -103,7 +107,7 @@
 }.
 -type tag_action  () :: mg_core_machine_tags:tag().
 -type timer_action() ::
-      {set_timer, timer(), mg_core_events:history_range() | undefined, Timeout::pos_integer() | undefined}
+      {set_timer, timer(), history_range() | undefined, Timeout::pos_integer() | undefined}
     |  unset_timer
 .
 -type timer       () :: {timeout, timeout_()} | {deadline, calendar:datetime()}.
@@ -111,119 +115,99 @@
 -type deadline    () :: mg_core_deadline:deadline().
 
 -type ref() :: {id, mg_core:id()} | {tag, mg_core_machine_tags:tag()}.
--type options() :: #{
-    namespace                  => mg_core:ns(),
-    events_storage             => storage_options(),
-    processor                  => mg_core_utils:mod_opts(),
-    tagging                    => mg_core_machine_tags:options(),
-    machines                   => mg_core_machine:options(),
-    pulse                      => mg_core_pulse:handler(),
-    event_sinks                => [mg_core_events_sink:handler()],
-    default_processing_timeout => timeout(),
-    event_stash_size           => non_neg_integer()
+-type start_options() :: #{
+    namespace := mg_core:ns(),
+    processor := mg_core_utils:mod_opts(),
+    tagging := mg_core_machine_tags:start_options(),
+    pulse := mg_core_pulse:handler(),
+    event_sinks := [mg_core_events_sink:handler()],
+    events_storage := storage_options(),
+    event_stash_size => non_neg_integer()
+}.
+-type call_options() :: #{
+    namespace := mg_core:ns(),
+    pulse := mg_core_pulse:handler(),
+    tagging := mg_core_machine_tags:call_options(),
+    events_storage := storage_options()
 }.
 -type storage_options() :: mg_core_utils:mod_opts(map()).  % like mg_core_storage:options() except `name`
+-type namespace_options() :: mg_core_namespace:call_options().
 
+%% API
 
--spec child_spec(options(), atom()) ->
-    supervisor:child_spec().
-child_spec(Options, ChildID) ->
-    #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options]},
-        restart  => permanent,
-        type     => supervisor
-    }.
-
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
-start_link(Options) ->
-    mg_core_utils_supervisor_wrapper:start_link(
-        #{strategy => one_for_all},
-        mg_core_utils:lists_compact([
-            mg_core_storage     :child_spec(events_storage_options(Options), events_storage),
-            mg_core_machine_tags:child_spec(tags_machine_options  (Options), tags     ),
-            mg_core_machine     :child_spec(machine_options       (Options), automaton)
-        ])
-    ).
-
--define(default_deadline, mg_core_deadline:from_timeout(5000)).
-
--spec start(options(), mg_core:id(), term(), request_context(), deadline()) ->
+-spec start(namespace_options(), mg_core:id(), term(), request_context(), deadline()) ->
     ok.
 start(Options, ID, Args, ReqCtx, Deadline) ->
     HRange = {undefined, undefined, forward},
-    ok = mg_core_machine:start(
-            machine_options(Options),
+    ok = mg_core_namespace:start(
+            Options,
             ID,
             {Args, HRange},
             ReqCtx,
             Deadline
         ).
 
--spec repair(options(), ref(), term(), mg_core_events:history_range(), request_context(), deadline()) ->
+-spec repair(namespace_options(), ref(), term(), history_range(), request_context(), deadline()) ->
     {ok, _Resp} | {error, repair_error()}.
 repair(Options, Ref, Args, HRange, ReqCtx, Deadline) ->
-    mg_core_machine:repair(
-        machine_options(Options),
+    mg_core_namespace:repair(
+        Options,
         ref2id(Options, Ref),
         {Args, HRange},
         ReqCtx,
         Deadline
     ).
 
--spec simple_repair(options(), ref(), request_context(), deadline()) ->
+-spec simple_repair(namespace_options(), ref(), request_context(), deadline()) ->
     ok.
 simple_repair(Options, Ref, ReqCtx, Deadline) ->
-    ok = mg_core_machine:simple_repair(
-            machine_options(Options),
+    ok = mg_core_namespace:simple_repair(
+            Options,
             ref2id(Options, Ref),
             ReqCtx,
             Deadline
         ).
 
--spec call(options(), ref(), term(), mg_core_events:history_range(), request_context(), deadline()) ->
+-spec call(namespace_options(), ref(), term(), history_range(), request_context(), deadline()) ->
     _Resp.
 call(Options, Ref, Args, HRange, ReqCtx, Deadline) ->
-    mg_core_machine:call(
-        machine_options(Options),
+    mg_core_namespace:call(
+        Options,
         ref2id(Options, Ref),
         {Args, HRange},
         ReqCtx,
         Deadline
     ).
 
--spec get_machine(options(), ref(), mg_core_events:history_range()) ->
+-spec get_machine(namespace_options(), ref(), history_range()) ->
     machine().
 get_machine(Options, Ref, HRange) ->
-    % нужно понимать, что эти операции разнесены по времени, и тут могут быть рэйсы
-    ID = ref2id(Options, Ref),
-    InitialState = opaque_to_state(mg_core_machine:get(machine_options(Options), ID)),
-    {EffectiveState, ExtraEvents} = mg_core_utils:throw_if_undefined(
-        try_apply_delayed_actions(InitialState),
-        {logic, machine_not_found}
-    ),
-    machine(Options, ID, EffectiveState, ExtraEvents, HRange).
+    mg_core_namespace:get_machine(
+        Options,
+        ref2id(Options, Ref),
+        HRange
+    ).
 
--spec remove(options(), mg_core:id(), request_context(), deadline()) ->
+-spec remove(namespace_options(), mg_core:id(), request_context(), deadline()) ->
     ok.
 remove(Options, ID, ReqCtx, Deadline) ->
-    mg_core_machine:call(machine_options(Options), ID, remove, ReqCtx, Deadline).
+    mg_core_namespace:call(Options, ID, remove, ReqCtx, Deadline).
 
 %%
 
--spec ref2id(options(), ref()) ->
+-spec ref2id(namespace_options(), ref()) ->
     mg_core:id() | no_return().
 ref2id(_, {id, ID}) ->
     ID;
 ref2id(Options, {tag, Tag}) ->
-    case mg_core_machine_tags:resolve(tags_machine_options(Options), Tag) of
+    TagsOptions = tags_call_options(namespace_processor_options(Options)),
+    case mg_core_machine_tags:resolve(TagsOptions, Tag) of
         undefined -> throw({logic, machine_not_found});
         ID        -> ID
     end.
 
 %%
-%% mg_core_processor handler
+%% mg_core_machine handler
 %%
 -type state() :: #{
     events          => [mg_core_events:event()],
@@ -243,13 +227,37 @@ ref2id(Options, {tag, Tag}) ->
 
 %%
 
--spec processor_child_spec(options()) ->
+-spec processor_child_spec(start_options(), term()) ->
     supervisor:child_spec() | undefined.
-processor_child_spec(Options) ->
-    mg_core_utils:apply_mod_opts_if_defined(processor_options(Options), processor_child_spec, undefined).
+processor_child_spec(Options, ChildID) ->
+    Childs = mg_core_utils:lists_compact([
+        mg_core_storage:child_spec(events_storage_options(Options), events_storage),
+        mg_core_machine_tags:child_spec(tags_options(Options), tags),
+        mg_core_utils:apply_mod_opts_if_defined(processor_options(Options), processor_child_spec, undefined, [processor])
+    ]),
+    #{
+        id       => ChildID,
+        start    => {mg_core_utils_supervisor_wrapper, start_link, [#{strategy => one_for_one}, Childs]},
+        restart  => permanent,
+        type     => supervisor
+    }.
+
+-spec get_machine(Options, ID, Args, PackedState) -> Result when
+    Options :: call_options(),
+    ID :: mg_core:id(),
+    Args :: history_range(),
+    PackedState :: mg_core_machine:machine_state(),
+    Result :: machine().
+get_machine(Options, ID, HRange, State) ->
+    InitialState = opaque_to_state(State),
+    {EffectiveState, ExtraEvents} = mg_core_utils:throw_if_undefined(
+        try_apply_delayed_actions(InitialState),
+        {logic, machine_not_found}
+    ),
+    machine(Options, ID, EffectiveState, ExtraEvents, HRange).
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
-    Options :: options(),
+    Options :: start_options(),
     ID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
@@ -272,7 +280,7 @@ process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) ->
 %%
 
 -spec process_machine_(Options, ID, Impact, PCtx, ReqCtx, Deadline, State) -> Result when
-    Options :: options(),
+    Options :: start_options(),
     ID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact() | {'timeout', _},
     PCtx :: mg_core_machine:processing_context(),
@@ -329,7 +337,7 @@ process_machine_(Options, ID, continuation, PCtx, ReqCtx, Deadline, State0 = #{d
     {ReplyAction, FlowAction, NewState}.
 
 -spec process_machine_std(Options, ReqCtx, Deadline, Subj, Args , Machine, EventsRange, State) -> Result when
-    Options :: options(),
+    Options :: start_options(),
     ReqCtx :: request_context(),
     Deadline :: deadline(),
     Subj :: init | repair | call | timeout,
@@ -356,28 +364,28 @@ process_machine_std(Options, ReqCtx, Deadline, Subj, Args , Machine, EventsRange
     NewState = add_delayed_actions(DelayedActions, State),
     {noreply, {continue, Reply}, NewState}.
 
--spec add_tag(options(), mg_core:id(), request_context(), deadline(), undefined | mg_core_machine_tags:tag()) ->
+-spec add_tag(start_options(), mg_core:id(), request_context(), deadline(), undefined | mg_core_machine_tags:tag()) ->
     ok.
 add_tag(_, _, _, _, undefined) ->
     ok;
 add_tag(Options, ID, ReqCtx, Deadline, Tag) ->
-    case mg_core_machine_tags:add(tags_machine_options(Options), Tag, ID, ReqCtx, Deadline) of
+    case mg_core_machine_tags:add(tags_options(Options), Tag, ID, ReqCtx, Deadline) of
         ok ->
             ok;
         {already_exists, OtherMachineID} ->
-            case mg_core_machine:is_exist(machine_options(Options), OtherMachineID) of
+            case mg_core_machine_tags:is_target_exist(tags_options(Options), OtherMachineID) of
                 true ->
                     % была договорённость, что при двойном тэгировании роняем машину
                     exit({double_tagging, OtherMachineID});
                 false ->
                     % это забытый после удаления тэг
                     ok = mg_core_machine_tags:replace(
-                            tags_machine_options(Options), Tag, ID, ReqCtx, Deadline
+                            tags_options(Options), Tag, ID, ReqCtx, Deadline
                         )
             end
     end.
 
--spec split_events(options(), state(), [mg_core_events:event()]) ->
+-spec split_events(start_options(), state(), [mg_core_events:event()]) ->
     {state(), [mg_core_events:event()]}.
 split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEvents) ->
     Events = EventStash ++ NewEvents,
@@ -390,7 +398,7 @@ split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEve
             {State#{events => Events}, []}
     end.
 
--spec store_events(options(), mg_core:id(), request_context(), [mg_core_events:event()]) ->
+-spec store_events(start_options(), mg_core:id(), request_context(), [mg_core_events:event()]) ->
     ok.
 store_events(Options, ID, _, Events) ->
     lists:foreach(
@@ -401,10 +409,10 @@ store_events(Options, ID, _, Events) ->
     ).
 
 
--spec push_events_to_event_sinks(options(), mg_core:id(), request_context(), deadline(), [mg_core_events:event()]) ->
+-spec push_events_to_event_sinks(start_options(), mg_core:id(), request_context(), deadline(), [mg_core_events:event()]) ->
     ok.
 push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events) ->
-    Namespace = get_option(namespace, Options),
+    Namespace = maps:get(namespace, Options),
     EventSinks = maps:get(event_sinks, Options, []),
     lists:foreach(
         fun(EventSinkHandler) ->
@@ -448,13 +456,13 @@ apply_delayed_timer_actions_to_state(#{new_timer := unchanged}, State) ->
 apply_delayed_timer_actions_to_state(#{new_timer := Timer}, State) ->
     State#{timer := Timer}.
 
--spec emit_action_beats(options(), mg_core:id(), request_context(), delayed_actions()) ->
+-spec emit_action_beats(start_options(), mg_core:id(), request_context(), delayed_actions()) ->
     ok.
 emit_action_beats(Options, ID, ReqCtx, DelayedActions) ->
     ok = emit_timer_action_beats(Options, ID, ReqCtx, DelayedActions),
     ok.
 
--spec emit_timer_action_beats(options(), mg_core:id(), request_context(), delayed_actions()) ->
+-spec emit_timer_action_beats(start_options(), mg_core:id(), request_context(), delayed_actions()) ->
     ok.
 emit_timer_action_beats(_Options, _ID, _ReqCtx, #{new_timer := unchanged}) ->
     ok;
@@ -477,21 +485,21 @@ emit_timer_action_beats(Options, ID, ReqCtx, #{new_timer := Timer}) ->
 
 %%
 
--spec process_signal(options(), request_context(), deadline(), signal(), machine(), mg_core_events:events_range()) ->
+-spec process_signal(start_options(), request_context(), deadline(), signal(), machine(), mg_core_events:events_range()) ->
     {ok, delayed_actions()}.
 process_signal(#{processor := Processor}, ReqCtx, Deadline, Signal, Machine, EventsRange) ->
     SignalArgs = [ReqCtx, Deadline, {Signal, Machine}],
     {StateChange, ComplexAction} = mg_core_utils:apply_mod_opts(Processor, process_signal, SignalArgs),
     {ok, handle_processing_result(StateChange, ComplexAction, EventsRange, ReqCtx)}.
 
--spec process_call(options(), request_context(), deadline(), term(), machine(), mg_core_events:events_range()) ->
+-spec process_call(start_options(), request_context(), deadline(), term(), machine(), mg_core_events:events_range()) ->
     {_Resp, delayed_actions()}.
 process_call(#{processor := Processor}, ReqCtx, Deadline, Args, Machine, EventsRange) ->
     CallArgs = [ReqCtx, Deadline, {Args, Machine}],
     {Resp, StateChange, ComplexAction} = mg_core_utils:apply_mod_opts(Processor, process_call, CallArgs),
     {Resp, handle_processing_result(StateChange, ComplexAction, EventsRange, ReqCtx)}.
 
--spec process_repair(options(), request_context(), deadline(), term(), machine(), mg_core_events:events_range()) ->
+-spec process_repair(start_options(), request_context(), deadline(), term(), machine(), mg_core_events:events_range()) ->
     {ok, {mg_core_storage:opaque(), delayed_actions()}} | {error, repair_error()}.
 process_repair(#{processor := Processor}, ReqCtx, Deadline, Args, Machine, EventsRange) ->
     RepairArgs = [ReqCtx, Deadline, {Args, Machine}],
@@ -549,37 +557,36 @@ get_timer_action({set_timer, Timer, HRange, HandlingTimeout}, ReqCtx) ->
 
 %%
 
--spec processor_options(options()) ->
+-spec processor_options(start_options()) ->
     mg_core_utils:mod_opts().
 processor_options(Options) ->
     maps:get(processor, Options).
 
--spec machine_options(options()) ->
-    mg_core_machine:options().
-machine_options(Options = #{machines := MachinesOptions}) ->
-    (maps:without([processor], MachinesOptions))#{
-        processor => {?MODULE, Options}
-    }.
-
--spec events_storage_options(options()) ->
+-spec events_storage_options(start_options() | call_options()) ->
     mg_core_storage:options().
 events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
     {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
     {Mod, Options#{name => {NS, ?MODULE, events}, pulse => Handler}}.
 
--spec tags_machine_options(options()) ->
-    mg_core_machine_tags:options().
-tags_machine_options(#{tagging := Options}) ->
+-spec tags_options
+    (start_options()) -> mg_core_machine_tags:start_options();
+    (call_options()) -> mg_core_machine_tags:call_options().
+tags_options(#{tagging := Options}) ->
     Options.
 
--spec get_option(atom(), options()) ->
-    _.
-get_option(Subj, Options) ->
-    maps:get(Subj, Options).
+-spec tags_call_options(call_options()) ->
+    mg_core_machine_tags:call_options().
+tags_call_options(#{tagging := Options}) ->
+    Options.
+
+-spec namespace_processor_options(namespace_options()) -> call_options().
+namespace_processor_options(NSOptions) ->
+    {?MODULE, Options} = maps:get(processor, NSOptions),
+    Options.
 
 %%
 
--spec machine(options(), mg_core:id(), state(), [mg_core_events:event()], mg_core_events:history_range()) ->
+-spec machine(call_options() | start_options(), mg_core:id(), state(), [mg_core_events:event()], history_range()) ->
     machine().
 machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
     #{
@@ -608,7 +615,7 @@ machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
 -type event_getter() :: fun((mg_core_events:events_range()) -> [mg_core_events:event()]).
 -type event_sources() :: [{mg_core_events:events_range(), event_getter()}, ...].
 
--spec get_events(event_sources(), mg_core_events:events_range(), mg_core_events:history_range()) ->
+-spec get_events(event_sources(), mg_core_events:events_range(), history_range()) ->
     [mg_core_events:event()].
 get_events(Sources, EventsRange, HRange) ->
     lists:flatten(gather_events(Sources, mg_core_events:intersect_range(EventsRange, HRange))).
@@ -652,7 +659,7 @@ concat_events(Events, []) ->
 concat_events(Events, Acc) ->
     [Events | Acc].
 
--spec storage_event_getter(options(), mg_core:id()) ->
+-spec storage_event_getter(call_options() | start_options(), mg_core:id()) ->
     event_getter().
 storage_event_getter(Options, ID) ->
     StorageOptions = events_storage_options(Options),

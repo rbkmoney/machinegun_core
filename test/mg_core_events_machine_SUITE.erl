@@ -61,6 +61,11 @@
     sink_handler => fun((history()) -> ok)
 }.
 
+-type options_diff() :: #{
+    pulse => mg_core_pulse:handler(),
+    event_stash_size => non_neg_integer()
+}.
+
 -type test_name() :: atom().
 -type config() :: [{atom(), _}].
 
@@ -117,7 +122,7 @@ get_events_test(_C) ->
             StorageOpts = #{
                 batching => #{concurrency_limit => rand:uniform(5 * I)}
             },
-            Options = events_machine_options(BaseOpts, StorageOpts, ProcessorOpts, NS),
+            Options = namespace_options(ProcessorOpts, NS, StorageOpts, BaseOpts),
             ct:pal("Options = ~p", [Options]),
             {Pid, Options} = start_automaton(Options),
             MachineID = genlib:to_binary(I),
@@ -303,12 +308,12 @@ dummy_sink_handler(_Events) ->
 -spec start_automaton(options(), mg_core:ns()) ->
     pid().
 start_automaton(ProcessorOptions, NS) ->
-    start_automaton(events_machine_options(ProcessorOptions, NS)).
+    start_automaton(namespace_options(ProcessorOptions, NS)).
 
 -spec start_automaton(mg_core_events_machine:options()) ->
     {pid(), mg_core_events_machine:options()}.
 start_automaton(Options) ->
-    {mg_core_utils:throw_if_error(mg_core_events_machine:start_link(Options)), Options}.
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)), Options}.
 
 -spec stop_automaton(pid()) ->
     ok.
@@ -316,56 +321,60 @@ stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec events_machine_options(options(), mg_core:ns()) ->
+-spec namespace_options(options(), mg_core:ns()) ->
     mg_core_events_machine:options().
-events_machine_options(Options, NS) ->
-    events_machine_options(#{}, #{}, Options, NS).
+namespace_options(Options, NS) ->
+    namespace_options(Options, NS, #{}, #{}).
 
--spec events_machine_options(BaseOptions, StorageOptions, options(), mg_core:ns()) ->
-    mg_core_events_machine:options() when
-        BaseOptions :: mg_core_events_machine:options(),
-        StorageOptions :: mg_core_storage:storage_options().
-events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
+-spec namespace_options(options(), mg_core:ns(), mg_core_storage:storage_options(), options_diff()) ->
+    mg_core_namespace:start_options().
+namespace_options(ProcessorOptions, NS, StorageOptions, BaseOptions) ->
     Scheduler = #{},
     Options = maps:merge(
         #{
             pulse => ?MODULE,
-            default_processing_timeout => timer:seconds(10),
-            event_stash_size => 5,
-            event_sinks => [
-                {?MODULE, ProcessorOptions}
-            ]
+            event_stash_size => 5
         },
-        Base
+        BaseOptions
     ),
     Pulse = maps:get(pulse, Options),
+    EventStashSize = maps:get(event_stash_size, Options),
     Storage = {mg_core_storage_memory, StorageOptions},
-    Options#{
+    #{
         namespace => NS,
-        processor => {?MODULE, ProcessorOptions},
-        tagging => #{
-            namespace => <<NS/binary, "_tags">>,
-            storage => Storage,
-            worker => #{
-                registry => mg_core_procreg_gproc
-            },
-            pulse => Pulse,
-            retries => #{}
-        },
-        machines => #{
+        processor => {mg_core_events_machine, #{
             namespace => NS,
-            storage => mg_core_ct_helper:build_storage(NS, Storage),
-            worker => #{
-                registry => mg_core_procreg_gproc
-            },
+            processor => {?MODULE, ProcessorOptions},
             pulse => Pulse,
-            schedulers => #{
-                timers         => Scheduler,
-                timers_retries => Scheduler,
-                overseer       => Scheduler
-            }
+            events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_events">>, Storage),
+            tagging => #{
+                namespace => <<NS/binary, "_tags">>,
+                storage => Storage,
+                registry => mg_core_procreg_gproc,
+                pulse => Pulse,
+                target => #{
+                    namespace => NS,
+                    pulse => Pulse,
+                    registry => mg_core_procreg_gproc,
+                    storage => mg_core_ct_helper:build_storage(NS, Storage)
+                }
+            },
+            event_sinks => [
+                {?MODULE, ProcessorOptions}
+            ],
+            event_stash_size => EventStashSize
+        }},
+        storage => mg_core_ct_helper:build_storage(NS, Storage),
+        registry => mg_core_procreg_gproc,
+        pulse => Pulse,
+        schedulers => #{
+            timers => Scheduler,
+            timers_retries => Scheduler,
+            overseer => Scheduler
         },
-        events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_sink">>, Storage)
+        machine => #{
+            timer_processing_timeout => timer:seconds(10)
+        }
     }.
 
 -spec start(mg_core_events_machine:options(),  mg_core:id(), term()) ->

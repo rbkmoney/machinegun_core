@@ -132,9 +132,9 @@ automaton_options() ->
     #{
         namespace => <<"test_tags">>,
         storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
-        retries   => #{}
+        target    => #{}
     }.
 
 -spec handle_beat(_, mg_core_pulse:beat()) ->

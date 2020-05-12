@@ -28,6 +28,7 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
+-export([get_machine/4]).
 -export([process_machine/7]).
 
 %% Pulse
@@ -78,8 +79,8 @@ continuation_delayed_retries_test(_C) ->
     Options = automaton_options(),
     Pid = start_automaton(Options),
     ID = ?MH_ID,
-    ok = mg_core_machine:start(Options, ID, #{},  ?REQ_CTX, mg_core_deadline:default()),
-    ok = mg_core_machine:call (Options, ID, test, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, #{},  ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(Options, ID, test, ?REQ_CTX, mg_core_deadline:default()),
     ok = timer:sleep(?TEST_SLEEP),
     2  = get_fail_count(),
     _  = stop_automaton(Pid).
@@ -87,6 +88,11 @@ continuation_delayed_retries_test(_C) ->
 %%
 %% processor
 %%
+
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
 
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
@@ -120,7 +126,7 @@ update_fail_count(FailCount) ->
 -spec start_automaton(mg_core_machine:options()) ->
     pid().
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
 
 -spec stop_automaton(pid()) ->
     ok.
@@ -129,16 +135,18 @@ stop_automaton(Pid) ->
     ok.
 
 -spec automaton_options() ->
-    mg_core_machine:options().
+    mg_core_namespace:start_options().
 automaton_options() ->
     #{
         namespace => ?MH_NS,
         processor => ?MODULE,
         storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
-        retries   => #{
-            continuation => {intervals, ?TEST_INTERVALS}
+        machine   => #{
+            retries   => #{
+                continuation => {intervals, ?TEST_INTERVALS}
+            }
         }
     }.
 

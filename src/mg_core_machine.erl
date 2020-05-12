@@ -23,6 +23,9 @@
 %%%
 -module(mg_core_machine).
 
+-behaviour(mg_core_worker).
+-behaviour(gen_server).
+
 %%
 %% Логика работы с ошибками.
 %%
@@ -58,78 +61,60 @@
 -include_lib("machinegun_core/include/pulse.hrl").
 
 %% API
--export_type([retry_opt             /0]).
--export_type([suicide_probability   /0]).
--export_type([scheduler_opt         /0]).
--export_type([schedulers_opt        /0]).
--export_type([options               /0]).
--export_type([storage_options       /0]).
--export_type([thrown_error          /0]).
--export_type([logic_error           /0]).
--export_type([transient_error       /0]).
--export_type([throws                /0]).
--export_type([machine_state         /0]).
--export_type([machine_status        /0]).
--export_type([processor_impact      /0]).
--export_type([processing_context    /0]).
--export_type([processor_result      /0]).
+-export_type([retry_opt/0]).
+-export_type([suicide_probability/0]).
+-export_type([scheduler_opt/0]).
+-export_type([schedulers_opt/0]).
+-export_type([start_options/0]).
+-export_type([call_options/0]).
+-export_type([storage_options/0]).
+-export_type([processor_start_options/0]).
+-export_type([processor_call_options/0]).
+-export_type([thrown_error/0]).
+-export_type([logic_error/0]).
+-export_type([transient_error/0]).
+-export_type([call/0]).
+-export_type([machine_state/0]).
+-export_type([processor_machine_state/0]).
+-export_type([get_machine_args/0]).
+-export_type([machine_status/0]).
+-export_type([processor_impact/0]).
+-export_type([processing_context/0]).
+-export_type([processor_result/0]).
 -export_type([processor_reply_action/0]).
--export_type([processor_flow_action /0]).
--export_type([search_query          /0]).
+-export_type([processor_flow_action/0]).
+-export_type([search_query/0]).
 -export_type([machine_regular_status/0]).
 
--export([child_spec /2]).
--export([start_link /1]).
--export([start_link /2]).
+-export([child_spec/2]).
 
--export([start               /5]).
--export([simple_repair       /4]).
--export([repair              /5]).
--export([call                /5]).
--export([send_timeout        /4]).
--export([resume_interrupted  /3]).
--export([fail                /4]).
--export([fail                /5]).
--export([get                 /2]).
--export([get_status          /2]).
--export([is_exist            /2]).
--export([search              /2]).
--export([search              /3]).
--export([search              /4]).
--export([reply               /2]).
--export([call_with_lazy_start/6]).
+-export([get_machine/3]).
+-export([get_status/2]).
+-export([is_exist/2]).
+-export([search/2]).
+-export([search/3]).
+-export([search/4]).
+-export([reply/2]).
 
 %% Internal API
--export([all_statuses          /0]).
--export([manager_options       /1]).
--export([get_storage_machine   /2]).
+-export([all_statuses/0]).
+-export([get_storage_machine/2]).
 
-%% mg_core_worker
--behaviour(mg_core_worker).
--export([handle_load/3, handle_call/5, handle_unload/1]).
+%% mg_core_worker callbacks
+-export([start_link/5, call/5]).
+
+%% gen_server callbacks
+-export([init/1, handle_info/2, handle_cast/2, handle_call/3, code_change/3, terminate/2]).
 
 %%
 %% API
 %%
 -type seconds() :: non_neg_integer().
--type scheduler_type() :: overseer | timers | timers_retries.
--type scheduler_opt() :: disable | #{
-    % how much tasks in total scheduler is ready to enqueue for processing
-    capacity => non_neg_integer(),
-    % wait at least this delay before subsequent scanning of persistent store for queued tasks
-    min_scan_delay => mg_core_queue_scanner:scan_delay(),
-    % wait at most this delay before subsequent scanning attempts when queue appears to be empty
-    rescan_delay => mg_core_queue_scanner:scan_delay(),
-    % how many tasks to fetch at most
-    max_scan_limit => mg_core_queue_scanner:scan_limit(),
-    % by how much to adjust limit to account for possibly duplicated tasks
-    scan_ahead => mg_core_queue_scanner:scan_ahead(),
+-type scheduler_type() :: timers | timers_retries.
+-type scheduler_opt() :: #{
+    id := mg_core_scheduler:id(),
     % how many seconds in future a task can be for it to be sent to the local scheduler
-    target_cutoff => seconds(),
-    % name of quota limiting number of active tasks
-    task_quota => mg_core_quota_worker:name(),
-    % share of quota limit
-    task_share => mg_core_quota:share()
+    target_cutoff => seconds()
 }.
 -type retry_subj() :: storage | processor | timers | continuation.
 -type retry_opt() :: #{
@@ -138,29 +123,47 @@
 -type schedulers_opt() :: #{scheduler_type() => scheduler_opt()}.
 -type suicide_probability() :: float() | integer() | undefined. % [0, 1]
 
-%% FIXME: some of these are listed as optional (=>)
-%%        whereas later in the code they are rigidly matched (:=)
-%%        fixed for namespace and pulse
--type options() :: #{
-    namespace                := mg_core:ns(),
-    pulse                    := mg_core_pulse:handler(),
-    storage                  => storage_options(),
-    processor                => mg_core_utils:mod_opts(),
-    worker                   => mg_core_workers_manager:options(),
-    retries                  => retry_opt(),
-    schedulers               => schedulers_opt(),
-    suicide_probability      => suicide_probability(),
+-type start_options() :: #{
+    namespace := mg_core:ns(),
+    pulse := mg_core_pulse:handler(),
+    storage := storage_options(),
+    processor := processor_start_options(),
+    schedulers := schedulers_opt(),
+    retries => retry_opt(),
+    unload_timeout => timeout(),
+    hibernate_timeout => timeout(),
+    suicide_probability => suicide_probability(),
     timer_processing_timeout => timeout()
 }.
 
--type storage_options() :: mg_core_utils:mod_opts(map()).  % like mg_core_storage:options() except `name`
+-type call_options() :: #{
+    namespace := mg_core:ns(),
+    pulse := mg_core_pulse:handler(),
+    storage := storage_options(),
+    processor := processor_call_options()
+}.
 
+-type call() ::
+      {start, Args::term()}
+    | {fail, Exception::term()}
+    | {call, Payload::term()}
+    | {repair, Args::term()}
+    | {timeout, seconds()}
+    |  simple_repair
+    |  resume_interrupted_one
+.
+
+-type storage_options() :: mg_core_storage:options().
+-type processor_start_options() :: mg_core_utils:mod_opts().
+-type processor_call_options() :: mg_core_utils:mod_opts().
 -type thrown_error() :: {logic, logic_error()} | {transient, transient_error()} | {timeout, _Reason}.
 -type logic_error() :: machine_already_exist | machine_not_found | machine_failed | machine_already_working.
 -type transient_error() :: overload | {storage_unavailable, _Reason} | {processor_unavailable, _Reason} | unavailable.
 
 -type throws() :: no_return().
 -type machine_state() :: mg_core_storage:opaque().
+-type processor_machine_state() :: term().
+-type get_machine_args() :: term().
 
 -type machine_regular_status() ::
        sleeping
@@ -199,9 +202,10 @@
 -type processor_retry() :: mg_core_retry:strategy() | undefined.
 
 -type deadline() :: mg_core_deadline:deadline().
+-type reg_name() :: mg_core_utils:gen_reg_name().
 -type maybe(T) :: T | undefined.
 
--callback processor_child_spec(_Options) ->
+-callback processor_child_spec(_Options, term()) ->
     supervisor:child_spec() | undefined.
 -callback process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, MachineState) -> Result when
     Options :: any(),
@@ -212,7 +216,13 @@
     Deadline :: deadline(),
     MachineState :: machine_state(),
     Result :: processor_result().
--optional_callbacks([processor_child_spec/1]).
+-callback get_machine(Options, ID, Args, MachineState) -> Result when
+    Options :: any(),
+    ID :: mg_core:id(),
+    Args :: get_machine_args(),
+    MachineState :: machine_state(),
+    Result :: processor_machine_state().
+-optional_callbacks([processor_child_spec/2]).
 
 -type search_query() ::
        sleeping
@@ -225,163 +235,58 @@
 .
 
 %%
-
--spec child_spec(options(), atom()) ->
-    supervisor:child_spec().
+%% API
+%%
+-spec child_spec(start_options(), term()) ->
+    supervisor:child_spec() | undefined.
 child_spec(Options, ChildID) ->
-    #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options, ChildID]},
-        restart  => permanent,
-        type     => supervisor
-    }.
+    ProcessorOptions = processor_start_options(Options),
+    mg_core_utils:apply_mod_opts_if_defined(ProcessorOptions, processor_child_spec, undefined, [ChildID]).
 
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
-start_link(Options = #{namespace := NS}) ->
-    start_link(Options, {?MODULE, NS}).
-
--spec start_link(options(), _ChildID) ->
-    mg_core_utils:gen_start_ret().
-start_link(Options, ChildID) ->
-    mg_core_utils_supervisor_wrapper:start_link(
-        #{strategy => one_for_one},
-        [
-            machine_sup_child_spec(Options, {ChildID, machine_sup}),
-            scheduler_sup_child_spec(Options, {ChildID, scheduler_sup})
-        ]
-    ).
-
--spec machine_sup_child_spec(options(), _ChildID) ->
-    supervisor:child_spec().
-machine_sup_child_spec(Options, ChildID) ->
-    #{
-        id       => ChildID,
-        start    => {mg_core_utils_supervisor_wrapper, start_link, [
-            #{strategy => rest_for_one},
-            mg_core_utils:lists_compact([
-                mg_core_storage:child_spec(storage_options(Options), storage),
-                processor_child_spec(Options),
-                mg_core_workers_manager:child_spec(manager_options(Options), manager)
-            ])
-        ]},
-        restart  => permanent,
-        type     => supervisor
-    }.
-
--spec scheduler_sup_child_spec(options(), _ChildID) ->
-    supervisor:child_spec().
-scheduler_sup_child_spec(Options, ChildID) ->
-    #{
-        id       => ChildID,
-        start    => {mg_core_utils_supervisor_wrapper, start_link, [
-            #{
-                strategy  => one_for_one,
-                intensity => 10,
-                period    => 30
-            },
-            mg_core_utils:lists_compact([
-                scheduler_child_spec(timers        , Options),
-                scheduler_child_spec(timers_retries, Options),
-                scheduler_child_spec(overseer      , Options)
-            ])
-        ]},
-        restart  => permanent,
-        type     => supervisor
-    }.
-
--spec start(options(), mg_core:id(), term(), request_context(), deadline()) ->
+-spec call(call_options(), mg_core_utils:gen_ref(), call(), request_context(), deadline()) ->
     _Resp | throws().
-start(Options, ID, Args, ReqCtx, Deadline) ->
-    call_(Options, ID, {start, Args}, ReqCtx, Deadline).
+call(_Options, Ref, Call, ReqCtx, Deadline) ->
+    gen_server:call(Ref, {call, Deadline, Call, ReqCtx}, mg_core_deadline:to_timeout(Deadline)).
 
--spec simple_repair(options(), mg_core:id(), request_context(), deadline()) ->
-    _Resp | throws().
-simple_repair(Options, ID, ReqCtx, Deadline) ->
-    call_(Options, ID, simple_repair, ReqCtx, Deadline).
-
--spec repair(options(), mg_core:id(), term(), request_context(), deadline()) ->
-    _Resp | throws().
-repair(Options, ID, Args, ReqCtx, Deadline) ->
-    call_(Options, ID, {repair, Args}, ReqCtx, Deadline).
-
--spec call(options(), mg_core:id(), term(), request_context(), deadline()) ->
-    _Resp | throws().
-call(Options, ID, Call, ReqCtx, Deadline) ->
-    call_(Options, ID, {call, Call}, ReqCtx, Deadline).
-
--spec send_timeout(options(), mg_core:id(), genlib_time:ts(), deadline()) ->
-    _Resp | throws().
-send_timeout(Options, ID, Timestamp, Deadline) ->
-    call_(Options, ID, {timeout, Timestamp}, undefined, Deadline).
-
--spec resume_interrupted(options(), mg_core:id(), deadline()) ->
-    _Resp | throws().
-resume_interrupted(Options, ID, Deadline) ->
-    call_(Options, ID, resume_interrupted_one, undefined, Deadline).
-
--spec fail(options(), mg_core:id(), request_context(), deadline()) ->
-    ok.
-fail(Options, ID, ReqCtx, Deadline) ->
-    fail(Options, ID, {error, explicit_fail, []}, ReqCtx, Deadline).
-
--spec fail(options(), mg_core:id(), mg_core_utils:exception(), request_context(), deadline()) ->
-    ok.
-fail(Options, ID, Exception, ReqCtx, Deadline) ->
-    call_(Options, ID, {fail, Exception}, ReqCtx, Deadline).
-
--spec get(options(), mg_core:id()) ->
-    machine_state() | throws().
-get(Options, ID) ->
+-spec get_machine(call_options(), mg_core:id(), get_machine_args()) ->
+    processor_machine_state() | throws().
+get_machine(Options, ID, Args) ->
     {_, #{state := State}} =
         mg_core_utils:throw_if_undefined(get_storage_machine(Options, ID), {logic, machine_not_found}),
-    State.
+    mg_core_utils:apply_mod_opts(
+        processor_call_options(Options),
+        get_machine,
+        [ID, Args, State]
+    ).
 
--spec get_status(options(), mg_core:id()) ->
+-spec get_status(call_options(), mg_core:id()) ->
     machine_status() | throws().
 get_status(Options, ID) ->
     {_, #{status := Status}} =
         mg_core_utils:throw_if_undefined(get_storage_machine(Options, ID), {logic, machine_not_found}),
     Status.
 
--spec is_exist(options(), mg_core:id()) ->
+-spec is_exist(call_options(), mg_core:id()) ->
     boolean() | throws().
 is_exist(Options, ID) ->
     get_storage_machine(Options, ID) =/= undefined.
 
--spec search(options(), search_query(), mg_core_storage:index_limit(), mg_core_storage:continuation()) ->
+-spec search(call_options(), search_query(), mg_core_storage:index_limit(), mg_core_storage:continuation()) ->
     mg_core_storage:search_result() | throws().
 search(Options, Query, Limit, Continuation) ->
     StorageQuery = storage_search_query(Query, Limit, Continuation),
     mg_core_storage:search(storage_options(Options), StorageQuery).
 
--spec search(options(), search_query(), mg_core_storage:index_limit()) ->
+-spec search(call_options(), search_query(), mg_core_storage:index_limit()) ->
     mg_core_storage:search_result() | throws().
 search(Options, Query, Limit) ->
     mg_core_storage:search(storage_options(Options), storage_search_query(Query, Limit)).
 
--spec search(options(), search_query()) ->
+-spec search(call_options(), search_query()) ->
     mg_core_storage:search_result() | throws().
 search(Options, Query) ->
     % TODO deadline
     mg_core_storage:search(storage_options(Options), storage_search_query(Query)).
-
--spec call_with_lazy_start(options(), mg_core:id(), term(), request_context(), deadline(), term()) ->
-    _Resp | throws().
-call_with_lazy_start(Options, ID, Call, ReqCtx, Deadline, StartArgs) ->
-    try
-        call(Options, ID, Call, ReqCtx, Deadline)
-    catch throw:{logic, machine_not_found} ->
-        try
-            _ = start(Options, ID, StartArgs, ReqCtx, Deadline)
-        catch throw:{logic, machine_already_exist} ->
-            % вдруг кто-то ещё делает аналогичный процесс
-            ok
-        end,
-        % если к этому моменту машина не создалась, значит она уже не создастся
-        % и исключение будет оправданным
-        call(Options, ID, Call, ReqCtx, Deadline)
-    end.
 
 -spec reply(processing_context(), _) ->
     ok.
@@ -389,13 +294,113 @@ reply(undefined, _) ->
     % отвечать уже некому
     ok;
 reply(#{call_context := CallContext}, Reply) ->
-    ok = mg_core_worker:reply(CallContext, Reply).
+    _ = gen_server:reply(CallContext, Reply),
+    ok.
+
+%%
+%% mg_core_worker callbacks
+%%
+-spec start_link(start_options(), reg_name(), mg_core:id(), request_context(), deadline()) ->
+    mg_core_utils:gen_start_ret().
+start_link(Options, RegName, ID, ReqCtx, Deadline) ->
+    Opts = [{timeout, mg_core_deadline:to_timeout(Deadline)}],
+    gen_server:start_link(RegName, ?MODULE, {ID, Options, ReqCtx}, Opts).
+
+%%
+%% gen_server callbacks
+%%
+-type worker_state() :: #{
+    id                := mg_core:id(),
+    status            := {loading, start_options(), request_context()} | {working, MachineState :: state()},
+    unload_tref       := reference() | undefined,
+    hibernate_timeout := timeout(),
+    unload_timeout    := timeout()
+}.
+
+-spec init({mg_core:id(), start_options(), request_context()}) ->
+    mg_core_utils:gen_server_init_ret(worker_state()).
+init({ID, Options, ReqCtx}) ->
+    HibernateTimeout = maps:get(hibernate_timeout, Options, 5 * 1000),
+    UnloadTimeout = maps:get(unload_timeout, Options, 60 * 1000),
+    State = #{
+        id                => ID,
+        status            => {loading, Options, ReqCtx},
+        unload_tref       => undefined,
+        hibernate_timeout => HibernateTimeout,
+        unload_timeout    => UnloadTimeout
+    },
+    {ok, schedule_unload_timer(State)}.
+
+-spec handle_call(_Call, mg_core_utils:gen_server_from(), worker_state()) ->
+    mg_core_utils:gen_server_handle_call_ret(worker_state()).
+% загрузка делается отдельно и лениво, чтобы не блокировать этим супервизор,
+% т.к. у него легко может начать расти очередь
+handle_call(Call={call, _, _, _}, From, State=#{id:=ID, status:={loading, Options, ReqCtx}}) ->
+    case handle_load(ID, Options, ReqCtx) of
+        {ok, ModState} ->
+            handle_call(Call, From, State#{status:={working, ModState}});
+        Error={error, _} ->
+            {stop, normal, Error, State}
+    end;
+handle_call({call, Deadline, Call, ReqCtx}, From, State=#{status:={working, ModState}}) ->
+    case mg_core_deadline:is_reached(Deadline) of
+        false ->
+            {ReplyAction, NewModState} = handle_call(Call, From, ReqCtx, Deadline, ModState),
+            NewState = State#{status:={working, NewModState}},
+            case ReplyAction of
+                {reply, Reply} -> {reply, Reply, schedule_unload_timer(NewState), hibernate_timeout(NewState)};
+                noreply        -> {noreply, schedule_unload_timer(NewState), hibernate_timeout(NewState)}
+            end;
+        true ->
+            ok = logger:warning(
+                "rancid worker call received: ~p from: ~p deadline: ~s reqctx: ~p",
+                [Call, From, mg_core_deadline:format(Deadline), ReqCtx]
+            ),
+            {noreply, schedule_unload_timer(State), hibernate_timeout(State)}
+    end;
+handle_call(Call, From, State) ->
+    ok = logger:error("unexpected gen_server call received: ~p from ~p", [Call, From]),
+    {noreply, State, hibernate_timeout(State)}.
+
+-spec handle_cast(_Cast, worker_state()) ->
+    mg_core_utils:gen_server_handle_cast_ret(worker_state()).
+handle_cast(Cast, State) ->
+    ok = logger:error("unexpected gen_server cast received: ~p", [Cast]),
+    {noreply, State, hibernate_timeout(State)}.
+
+-spec handle_info(_Info, worker_state()) ->
+    mg_core_utils:gen_server_handle_info_ret(worker_state()).
+handle_info(timeout, State) ->
+    {noreply, State, hibernate};
+handle_info({timeout, TRef, unload}, State=#{unload_tref:=TRef, status:=Status}) ->
+    case Status of
+        {working, ModState} ->
+            _ = handle_unload(ModState);
+        {loading, _, _} ->
+            ok
+    end,
+    {stop, normal, State};
+handle_info({timeout, _, unload}, State=#{}) ->
+    % А кто-то опаздал!
+    {noreply, schedule_unload_timer(State), hibernate_timeout(State)};
+handle_info(Info, State) ->
+    ok = logger:error("unexpected gen_server info ~p", [Info]),
+    {noreply, State, hibernate_timeout(State)}.
+
+-spec code_change(_, worker_state(), _) ->
+    mg_core_utils:gen_server_code_change_ret(worker_state()).
+code_change(_, State, _) ->
+    {ok, State}.
+
+-spec terminate(_Reason, worker_state()) ->
+    ok.
+terminate(_, _) ->
+    ok.
 
 %%
 %% Internal API
 %%
 -define(DEFAULT_RETRY_POLICY       , {exponential, infinity, 2, 10, 60 * 1000}).
--define(DEFAULT_SCHEDULER_CAPACITY , 1000).
 
 -define(can_be_retried(ErrorType), ErrorType =:= transient orelse ErrorType =:= timeout).
 
@@ -406,18 +411,13 @@ reply(#{call_context := CallContext}, Reply) ->
 all_statuses() ->
     [sleeping, waiting, retrying, processing, failed].
 
--spec call_(options(), mg_core:id(), _, maybe(request_context()), deadline()) ->
-    _ | no_return().
-call_(Options, ID, Call, ReqCtx, Deadline) ->
-    mg_core_utils:throw_if_error(mg_core_workers_manager:call(manager_options(Options), ID, Call, ReqCtx, Deadline)).
-
 %%
-%% mg_core_worker callbacks
+%% worker internals
 %%
 -type state() :: #{
     id              => mg_core:id(),
     namespace       => mg_core:ns(),
-    options         => options(),
+    options         => start_options(),
     schedulers      => #{scheduler_type() => scheduler_ref()},
     storage_machine => storage_machine() | nonexistent | unknown,
     storage_context => mg_core_storage:context() | undefined
@@ -431,24 +431,20 @@ call_(Options, ID, Call, ReqCtx, Deadline) ->
 -type scheduler_ref() ::
     {mg_core_scheduler:id(), _TargetCutoff :: seconds()}.
 
--spec handle_load(mg_core:id(), options(), request_context()) ->
-    {ok, state()}.
+-spec handle_load(mg_core:id(), start_options(), request_context()) ->
+    {ok, state()} | {error, Reason :: any()}.
 handle_load(ID, Options, ReqCtx) ->
     Namespace = maps:get(namespace, Options),
-    State1 = #{
+    Schedulers = maps:get(schedulers, Options),
+    State = #{
         id              => ID,
         namespace       => Namespace,
         options         => Options,
-        schedulers      => #{},
+        schedulers      => Schedulers,
         storage_machine => unknown,
         storage_context => undefined
     },
-    State2 = lists:foldl(
-        fun try_acquire_scheduler/2,
-        State1,
-        [timers, timers_retries]
-    ),
-    load_storage_machine(ReqCtx, State2).
+    load_storage_machine(ReqCtx, State).
 
 -spec handle_call(_Call, mg_core_worker:call_context(), maybe(request_context()), deadline(), state()) ->
     {{reply, _Resp} | noreply, state()}.
@@ -541,7 +537,7 @@ new_storage_machine() ->
         state  => null
     }.
 
--spec get_storage_machine(options(), mg_core:id()) ->
+-spec get_storage_machine(call_options() | start_options(), mg_core:id()) ->
     {mg_core_storage:context(), storage_machine()} | undefined.
 get_storage_machine(Options, ID) ->
     try mg_core_storage:get(storage_options(Options), ID) of
@@ -844,15 +840,10 @@ process_unsafe(Impact, ProcessingCtx, ReqCtx, Deadline, State = #{storage_machin
 call_processor(Impact, ProcessingCtx, ReqCtx, Deadline, State) ->
     #{options := Options, id := ID, storage_machine := #{state := MachineState}} = State,
     mg_core_utils:apply_mod_opts(
-        get_options(processor, Options),
+        processor_start_options(Options),
         process_machine,
         [ID, Impact, ProcessingCtx, ReqCtx, Deadline, MachineState]
     ).
-
--spec processor_child_spec(options()) ->
-    supervisor:child_spec().
-processor_child_spec(Options) ->
-    mg_core_utils:apply_mod_opts_if_defined(get_options(processor, Options), processor_child_spec, undefined).
 
 -spec reschedule(ReqCtx, Deadline, state()) -> state() when
     ReqCtx :: request_context(),
@@ -974,23 +965,11 @@ handle_status_transition({retrying, TargetTimestamp, _, _, _}, State) ->
 handle_status_transition(_Status, _State) ->
     ok.
 
--spec try_acquire_scheduler(scheduler_type(), state()) ->
-    state().
-try_acquire_scheduler(SchedulerType, State = #{schedulers := Schedulers, options := Options}) ->
-    case maps:find(SchedulerType, maps:get(schedulers, Options, #{})) of
-        {ok, Config} ->
-            SchedulerID = scheduler_id(SchedulerType, Options),
-            SchedulerRef = {SchedulerID, scheduler_cutoff(Config)},
-            State#{schedulers => Schedulers#{SchedulerType => SchedulerRef}};
-        _Disabled ->
-            State
-    end.
-
 -spec try_send_timer_task(scheduler_type(), mg_core_queue_task:target_time(), state()) ->
     ok.
 try_send_timer_task(SchedulerType, TargetTime, #{id := ID, schedulers := Schedulers}) ->
-    case maps:get(SchedulerType, Schedulers, undefined) of
-        {SchedulerID, Cutoff} when is_integer(Cutoff) ->
+    case maps:find(SchedulerType, Schedulers) of
+        {ok, #{id := SchedulerID, target_cutoff := Cutoff}} when is_integer(Cutoff) ->
             % Ok let's send if it's not too far in the future.
             CurrentTime = mg_core_queue_task:current_time(),
             case TargetTime =< CurrentTime + Cutoff of
@@ -1000,10 +979,10 @@ try_send_timer_task(SchedulerType, TargetTime, #{id := ID, schedulers := Schedul
                 false ->
                     ok
             end;
-        {_SchedulerID, undefined} ->
+        {ok, ShedulerOpts} when not is_map_key(target_cutoff, ShedulerOpts) ->
             % No defined cutoff, can't make decisions.
             ok;
-        undefined ->
+        error ->
             % No scheduler to send task to.
             ok
     end.
@@ -1028,14 +1007,14 @@ remove_from_storage(ReqCtx, Deadline, State) ->
     }),
     State#{storage_machine := nonexistent, storage_context := undefined}.
 
--spec retry_strategy(retry_subj(), options(), deadline()) ->
+-spec retry_strategy(retry_subj(), start_options(), deadline()) ->
     mg_core_retry:strategy().
 retry_strategy(Subj, Options, Deadline) ->
     retry_strategy(Subj, Options, Deadline, undefined, undefined).
 
 -spec retry_strategy(Subj, Options, Deadline, InitialTs, Attempt) -> mg_core_retry:strategy() when
     Subj :: retry_subj(),
-    Options :: options(),
+    Options :: start_options(),
     Deadline :: deadline(),
     InitialTs :: genlib_time:ts() | undefined,
     Attempt :: non_neg_integer() | undefined.
@@ -1132,7 +1111,7 @@ extract_timer_queue_info({retrying, Timestamp, _, _, _}) ->
 extract_timer_queue_info(_Other) ->
     {error, not_timer}.
 
--spec emit_machine_load_beat(options(), mg_core:ns(), mg_core:id(), request_context(), StorageMachine) -> ok when
+-spec emit_machine_load_beat(start_options(), mg_core:ns(), mg_core:id(), request_context(), StorageMachine) -> ok when
     StorageMachine :: storage_machine() | unknown | nonexistent.
 emit_machine_load_beat(Options, Namespace, ID, ReqCtx, nonexistent) ->
     ok = emit_beat(Options, #mg_core_machine_lifecycle_created{
@@ -1149,105 +1128,20 @@ emit_machine_load_beat(Options, Namespace, ID, ReqCtx, _StorageMachine) ->
 
 %%
 
--spec manager_options(options()) ->
-    mg_core_workers_manager:options().
-manager_options(Options = #{namespace := NS, worker := ManagerOptions, pulse := Pulse}) ->
-    ManagerOptions#{
-        name           => NS,
-        pulse          => Pulse,
-        worker_options => maps:merge(
-            maps:get(worker_options, ManagerOptions, #{}),
-            #{
-                worker => {?MODULE, Options}
-            }
-        )
-    }.
+-spec storage_options(start_options() | call_options()) ->
+    storage_options().
+storage_options(#{storage := Storage}) ->
+    Storage.
 
--spec storage_options(options()) ->
-    mg_core_storage:options().
-storage_options(#{namespace := NS, storage := StorageOptions, pulse := Handler}) ->
-    {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
-    {Mod, Options#{name => {NS, ?MODULE, machines}, pulse => Handler}}.
+-spec processor_start_options(start_options()) ->
+    processor_start_options().
+processor_start_options(#{processor := Processor}) ->
+    Processor.
 
--spec scheduler_child_spec(scheduler_type(), options()) ->
-    supervisor:child_spec() | undefined.
-scheduler_child_spec(SchedulerType, Options) ->
-    case maps:get(SchedulerType, maps:get(schedulers, Options, #{}), disable) of
-        disable ->
-            undefined;
-        Config ->
-            SchedulerID = scheduler_id(SchedulerType, Options),
-            SchedulerOptions = scheduler_options(SchedulerType, Options, Config),
-            mg_core_scheduler_sup:child_spec(SchedulerID, SchedulerOptions, SchedulerType)
-    end.
-
--spec scheduler_id(scheduler_type(), options()) ->
-    mg_core_scheduler:id() | undefined.
-scheduler_id(SchedulerType, #{namespace := NS}) ->
-    {SchedulerType, NS}.
-
--spec scheduler_options(scheduler_type(), options(), scheduler_opt()) ->
-    mg_core_scheduler_sup:options().
-scheduler_options(SchedulerType, Options, Config) when
-    SchedulerType == timers;
-    SchedulerType == timers_retries
-->
-    TimerQueue = case SchedulerType of
-        timers         -> waiting;
-        timers_retries -> retrying
-    end,
-    HandlerOptions = #{
-        processing_timeout => maps:get(timer_processing_timeout, Options, undefined),
-        timer_queue        => TimerQueue,
-        min_scan_delay     => maps:get(min_scan_delay, Config, undefined),
-        lookahead          => scheduler_cutoff(Config)
-    },
-    scheduler_options(mg_core_queue_timer, Options, HandlerOptions, Config);
-scheduler_options(overseer, Options, Config) ->
-    HandlerOptions = #{
-        min_scan_delay => maps:get(min_scan_delay, Config, undefined),
-        rescan_delay   => maps:get(rescan_delay, Config, undefined)
-    },
-    scheduler_options(mg_core_queue_interrupted, Options, HandlerOptions, Config).
-
--spec scheduler_options(module(), options(), map(), scheduler_opt()) ->
-    mg_core_scheduler_sup:options().
-scheduler_options(HandlerMod, Options, HandlerOptions, Config) ->
-    #{
-        pulse := Pulse
-    } = Options,
-    FullHandlerOptions = genlib_map:compact(maps:merge(
-        #{
-            pulse => Pulse,
-            machine => Options
-        },
-        HandlerOptions
-    )),
-    Handler = {HandlerMod, FullHandlerOptions},
-    genlib_map:compact(#{
-        capacity => maps:get(capacity, Config, ?DEFAULT_SCHEDULER_CAPACITY),
-        quota_name => maps:get(task_quota, Config, unlimited),
-        quota_share => maps:get(task_share, Config, 1),
-        queue_handler => Handler,
-        max_scan_limit => maps:get(max_scan_limit, Config, undefined),
-        scan_ahead => maps:get(scan_ahead, Config, undefined),
-        task_handler => Handler,
-        pulse => Pulse
-    }).
-
--spec scheduler_cutoff(scheduler_opt()) ->
-    seconds().
-scheduler_cutoff(#{target_cutoff := Cutoff}) ->
-    Cutoff;
-scheduler_cutoff(#{min_scan_delay := MinScanDelay}) ->
-    erlang:convert_time_unit(MinScanDelay, millisecond, second);
-scheduler_cutoff(#{}) ->
-    undefined.
-
--spec get_options(atom(), options()) ->
-    _.
-get_options(Subj, Options) ->
-    maps:get(Subj, Options).
+-spec processor_call_options(call_options()) ->
+    processor_call_options().
+processor_call_options(#{processor := Processor}) ->
+    Processor.
 
 -spec try_suicide(state(), request_context()) ->
     ok | no_return().
@@ -1270,8 +1164,11 @@ try_suicide(#{}, _) ->
 %%
 %% retrying
 %%
--spec do_with_retry(options(), mg_core:id(), fun(() -> R), mg_core_retry:strategy(), request_context(), atom()) ->
-    R.
+-spec do_with_retry(Options, ID, Fun, mg_core_retry:strategy(), request_context(), atom()) -> Result when
+    Options :: start_options(),
+    ID :: mg_core:id(),
+    Fun :: fun(() -> Result),
+    Result :: any().
 do_with_retry(Options = #{namespace := NS}, ID, Fun, RetryStrategy, ReqCtx, BeatCtx) ->
     try
         Fun()
@@ -1298,7 +1195,35 @@ do_with_retry(Options = #{namespace := NS}, ID, Fun, RetryStrategy, ReqCtx, Beat
 %%
 %% logging
 %%
-
--spec emit_beat(options(), mg_core_pulse:beat()) -> ok.
+-spec emit_beat(start_options(), mg_core_pulse:beat()) -> ok.
 emit_beat(#{pulse := Handler}, Beat) ->
     ok = mg_core_pulse:handle_beat(Handler, Beat).
+
+%%
+%% worker helpers
+%%
+-spec hibernate_timeout(worker_state()) ->
+    timeout().
+hibernate_timeout(#{hibernate_timeout:=Timeout}) ->
+    Timeout.
+
+-spec unload_timeout(worker_state()) ->
+    timeout().
+unload_timeout(#{unload_timeout:=Timeout}) ->
+    Timeout.
+
+-spec schedule_unload_timer(worker_state()) ->
+    worker_state().
+schedule_unload_timer(#{unload_tref := UnloadTRef} = State) ->
+    _ = case UnloadTRef of
+        undefined ->
+            ok;
+        TRef ->
+            erlang:cancel_timer(TRef)
+    end,
+    State#{unload_tref := start_timer(State)}.
+
+-spec start_timer(worker_state()) ->
+    reference().
+start_timer(State) ->
+    erlang:start_timer(unload_timeout(State), erlang:self(), unload).

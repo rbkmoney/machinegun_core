@@ -28,10 +28,9 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
--export([pool_child_spec/2]).
 -export([process_machine/7]).
+-export([get_machine/4]).
 
--export([start/0]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -79,11 +78,11 @@ instant_start_test(_C) ->
     Options = automaton_options(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
-     0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
+     0 = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
     F = fun() ->
-            mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())
+            mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())
         end,
     mg_core_ct_helper:assert_wait_expected(1, F, mg_core_retry:new_strategy({linear, _Retries = 10, _Timeout = 100})),
 
@@ -97,11 +96,11 @@ without_shedulers_test(_C) ->
     Options = automaton_options_wo_shedulers(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
-     0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
+     0 = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
     % machine is still alive
-    _  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    _  = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
 
     ok = stop_automaton(Pid).
 
@@ -114,13 +113,14 @@ without_shedulers_test(_C) ->
 }).
 -type machine_state() :: #machine_state{}.
 
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
-pool_child_spec(_Options, Name) ->
-    #{
-        id    => Name,
-        start => {?MODULE, start, []}
-    }.
+-spec get_machine(Options, ID, Args, PackedState) -> Result when
+    Options :: any(),
+    ID :: mg_core:id(),
+    Args :: undefined,
+    PackedState :: mg_core_machine:machine_state(),
+    Result :: machine_state().
+get_machine(_Options, _ID, undefined, State) ->
+    decode_state(State).
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, MachineState) -> Result when
     Options :: any(),
@@ -174,15 +174,10 @@ try_set_timer(#machine_state{timer = undefined}, Action) ->
 %%
 %% utils
 %%
--spec start()->
-    ignore.
-start() ->
-    ignore.
-
--spec start_automaton(mg_core_machine:options()) ->
+-spec start_automaton(mg_core_namespace:start_options()) ->
     pid().
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
 
 -spec stop_automaton(pid()) ->
     ok.
@@ -191,7 +186,7 @@ stop_automaton(Pid) ->
     ok.
 
 -spec automaton_options(mg_core:ns()) ->
-    mg_core_machine:options().
+    mg_core_namespace:start_options().
 automaton_options(NS) ->
     Scheduler = #{
         min_scan_delay => timer:hours(1)
@@ -200,9 +195,7 @@ automaton_options(NS) ->
         namespace => NS,
         processor => ?MODULE,
         storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{
-            registry => mg_core_procreg_gproc
-        },
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
         schedulers => #{
             timers         => Scheduler,
@@ -212,15 +205,13 @@ automaton_options(NS) ->
     }.
 
 -spec automaton_options_wo_shedulers(mg_core:ns()) ->
-    mg_core_machine:options().
+    mg_core_namespace:start_options().
 automaton_options_wo_shedulers(NS) ->
     #{
         namespace => NS,
         processor => ?MODULE,
         storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{
-            registry => mg_core_procreg_gproc
-        },
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
         schedulers => #{
             % none

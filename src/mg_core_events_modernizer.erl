@@ -48,7 +48,7 @@
 -type ref()           :: mg_core_events_machine:ref().
 -type history_range() :: mg_core_events:history_range().
 
--spec modernize_machine(options(), mg_core_events_machine:options(), request_context(), ref(), history_range()) ->
+-spec modernize_machine(options(), mg_core_namespace:call_options(), request_context(), ref(), history_range()) ->
     ok.
 modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
     #{ns := NS, id := ID, history := History} =
@@ -88,7 +88,7 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
             erlang:throw({logic, {invalid_modernized_version, Versions}})
     end.
 
--spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) ->
+-spec store_event(mg_core_namespace:call_options(), mg_core:id(), mg_core_events:event()) ->
     ok.
 store_event(Options, ID, Event) ->
     {Key, Value} = mg_core_events:add_machine_id(ID, mg_core_events:event_to_kv(Event)),
@@ -133,8 +133,10 @@ call_handler(#{handler := Handler}, ReqCtx, MachineEvent) ->
 %% На самом деле это кусок имплементации mg_core_events_machine, такого быть не должно. Возможно стоит
 %% пересмотреть граф зависимостей, например выделить mg_core_events_storage в виде отдельного модуля.
 
--spec events_storage_options(mg_core_events_machine:options()) ->
+-spec events_storage_options(mg_core_namespace:call_options()) ->
     mg_core_storage:options().
-events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
+events_storage_options(Options) ->
+    #{namespace := NS, pulse := Handler, processor := Processor} = Options,
+    {mg_core_events_machine, #{events_storage := StorageOptions}} = Processor,
     {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
     {Mod, Options#{name => {NS, mg_core_events_machine, events_storage}, pulse => Handler}}.

@@ -18,13 +18,15 @@
 
 %% API
 -export_type([event_body/0]).
--export_type([options/0]).
+-export_type([start_options/0]).
+-export_type([call_options/0]).
 -export_type([storage_options/0]).
--export_type([ns_options/0]).
--export([child_spec /2]).
--export([start_link /1]).
--export([get_history/3]).
--export([repair     /4]).
+
+-export([child_spec/2]).
+-export([start_link/1]).
+
+-export([get_history/2]).
+-export([repair/3]).
 
 %% mg_core_events_sink handler
 -behaviour(mg_core_events_sink).
@@ -32,7 +34,9 @@
 
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
+-export([get_machine/4]).
 -export([process_machine/7]).
+-export([processor_child_spec/2]).
 
 %%
 %% API
@@ -43,58 +47,71 @@
     event     => mg_core_events:event()
 }.
 -type event() :: mg_core_events:event(event_body()).
--type options() :: #{
-    name                       := atom(),
-    namespace                  := mg_core:ns(),
-    machine_id                 := mg_core:id(),
-    storage                    := storage_options(),
-    worker                     := mg_core_workers_manager:options(),
-    pulse                      := mg_core_pulse:handler(),
-    events_storage             := mg_core_storage:options(),
-    default_processing_timeout := timeout()
+
+-type start_options() :: #{
+    name := atom(),
+    namespace := mg_core:ns(),
+    registry := mg_core_procreg:options(),
+    pulse := mg_core_pulse:handler(),
+    storage := mg_core_namespace:storage_options(),
+    events_storage := storage_options(),
+    machine_id := mg_core:id(),
+    worker => mg_core_namespace:worker_options(),
+    machine => mg_core_namespace:machine_options(),
+    workers_manager => mg_core_namespace:workers_manager_start_options()
 }.
--type ns_options() :: #{
-    namespace                  := mg_core:ns(),
-    storage                    := storage_options(),
-    worker                     := mg_core_workers_manager:options(),
-    pulse                      := mg_core_pulse:handler(),
-    events_storage             := storage_options(),
-    default_processing_timeout := timeout()
+
+-type call_options() :: #{
+    name := atom(),
+    namespace := mg_core:ns(),
+    registry := mg_core_procreg:options(),
+    pulse := mg_core_pulse:handler(),
+    storage := mg_core_namespace:storage_options(),
+    events_storage := storage_options(),
+    machine_id := mg_core:id(),
+    workers_manager => mg_core_namespace:workers_manager_call_options()
 }.
+
 -type storage_options() :: mg_core_utils:mod_opts(map()).  % like mg_core_storage:options() except `name`
 
--spec child_spec(ns_options(), atom()) ->
+%% Internal types
+
+-type processor_start_options() :: #{
+    name := atom(),
+    namespace := mg_core:ns(),
+    pulse := mg_core_pulse:handler(),
+    events_storage := storage_options()
+}.
+
+-type processor_call_options() :: #{
+    name := atom(),
+    namespace := mg_core:ns(),
+    pulse := mg_core_pulse:handler(),
+    events_storage := storage_options()
+}.
+
+%% API
+
+-spec child_spec(start_options(), term()) ->
     supervisor:child_spec().
 child_spec(Options, ChildID) ->
-    #{
-        id      => ChildID,
-        start   => {?MODULE, start_link, [Options]},
-        restart => permanent,
-        type    => supervisor
-    }.
+    mg_core_namespace:child_spec(namespace_options(Options), ChildID).
 
-
--spec start_link(ns_options()) ->
+-spec start_link(start_options()) ->
     mg_core_utils:gen_start_ret().
 start_link(Options) ->
-    mg_core_utils_supervisor_wrapper:start_link(
-        #{strategy => one_for_all},
-        mg_core_utils:lists_compact([
-            mg_core_machine:child_spec(machine_options       (Options), automaton),
-            mg_core_storage:child_spec(events_storage_options(Options), events_storage)
-        ])
-    ).
+    mg_core_namespace:start_link(namespace_options(Options)).
 
-
--spec add_events(options(), mg_core:ns(), mg_core:id(), [mg_core_events:event()], ReqCtx, mg_core_deadline:deadline()) ->
-    ok
-when
-    ReqCtx:: mg_core:request_context()
-.
+-spec add_events(Options, SourceNS, SourceMachineID, Events, ReqCtx, Deadline) -> ok when
+    Options :: call_options(),
+    SourceNS :: mg_core:ns(),
+    SourceMachineID :: mg_core:id(),
+    Events :: [mg_core_events:event()],
+    ReqCtx :: mg_core:request_context(),
+    Deadline :: mg_core_deadline:deadline().
 add_events(#{machine_id := EventSinkID} = Options, SourceNS, SourceMachineID, Events, ReqCtx, Deadline) ->
-    NSOptions = maps:without([machine_id, name], Options),
-    ok = mg_core_machine:call_with_lazy_start(
-            machine_options(NSOptions),
+    ok = mg_core_namespace:call_with_lazy_start(
+            namespace_options(Options),
             EventSinkID,
             {add_events, SourceNS, SourceMachineID, Events},
             ReqCtx,
@@ -102,9 +119,9 @@ add_events(#{machine_id := EventSinkID} = Options, SourceNS, SourceMachineID, Ev
             undefined
         ).
 
--spec get_history(ns_options(), mg_core:id(), mg_core_events:history_range()) ->
+-spec get_history(call_options(), mg_core_events:history_range()) ->
     [event()].
-get_history(Options, EventSinkID, HistoryRange) ->
+get_history(#{machine_id := EventSinkID} = Options, HistoryRange) ->
     #{events_range := EventsRange} = get_state(Options, EventSinkID),
     StorageOptions = events_storage_options(Options),
     Batch = mg_core_dirange:fold(
@@ -120,10 +137,10 @@ get_history(Options, EventSinkID, HistoryRange) ->
     ],
     kvs_to_sink_events(EventSinkID, Kvs).
 
--spec repair(ns_options(), mg_core:id(), mg_core:request_context(), mg_core_deadline:deadline()) ->
+-spec repair(call_options(), mg_core:request_context(), mg_core_deadline:deadline()) ->
     ok.
-repair(Options, EventSinkID, ReqCtx, Deadline) ->
-    mg_core_machine:repair(machine_options(Options), EventSinkID, undefined, ReqCtx, Deadline).
+repair(#{machine_id := EventSinkID} = Options, ReqCtx, Deadline) ->
+    mg_core_namespace:repair(namespace_options(Options), EventSinkID, undefined, ReqCtx, Deadline).
 
 %%
 %% mg_core_processor handler
@@ -132,8 +149,22 @@ repair(Options, EventSinkID, ReqCtx, Deadline) ->
     events_range => mg_core_events:events_range()
 }.
 
+-spec processor_child_spec(processor_start_options(), term()) ->
+    supervisor:child_spec() | undefined.
+processor_child_spec(Options, ChildID) ->
+    mg_core_storage:child_spec(events_storage_options(Options), ChildID).
+
+-spec get_machine(Options, ID, Args, PackedState) -> Result when
+    Options :: processor_call_options(),
+    ID :: mg_core:id(),
+    Args :: undefined,
+    PackedState :: mg_core_machine:machine_state(),
+    Result :: state().
+get_machine(_Options, _ID, undefined, State) ->
+    opaque_to_state(State).
+
 -spec process_machine(Options, EventSinkID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
-    Options :: ns_options(),
+    Options :: processor_start_options(),
     EventSinkID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
@@ -150,7 +181,7 @@ process_machine(Options, EventSinkID, Impact, _PCtx, _ReqCtx, _Deadline, PackedS
     NewState = process_machine_(Options, EventSinkID, Impact, State),
     {{reply, ok}, sleep, state_to_opaque(NewState)}.
 
--spec process_machine_(ns_options(), mg_core:id(), mg_core_machine:processor_impact(), state()) ->
+-spec process_machine_(processor_start_options(), mg_core:id(), mg_core_machine:processor_impact(), state()) ->
     state().
 process_machine_(_, _, {init, undefined}, State) ->
     State;
@@ -163,7 +194,7 @@ process_machine_(Options, EventSinkID, {call, {add_events, SourceNS, SourceMachi
 
 %%
 
--spec store_sink_events(ns_options(), mg_core:id(), [event()]) ->
+-spec store_sink_events(processor_start_options(), mg_core:id(), [event()]) ->
     ok.
 store_sink_events(Options, EventSinkID, SinkEvents) ->
     lists:foreach(
@@ -173,19 +204,18 @@ store_sink_events(Options, EventSinkID, SinkEvents) ->
         SinkEvents
     ).
 
--spec store_event(ns_options(), mg_core:id(), event()) ->
+-spec store_event(processor_start_options(), mg_core:id(), event()) ->
     ok.
-store_event(Options, EventSinkID, SinkEvent) ->
+store_event(#{events_storage := Storage}, EventSinkID, SinkEvent) ->
     {Key, Value} = sink_event_to_kv(EventSinkID, SinkEvent),
-    _ = mg_core_storage:put(events_storage_options(Options), Key,
-            undefined, Value, []),
+    _ = mg_core_storage:put(Storage, Key, undefined, Value, []),
     ok.
 
--spec get_state(ns_options(), mg_core:id()) ->
+-spec get_state(call_options(), mg_core:id()) ->
     state().
 get_state(Options, EventSinkID) ->
     try
-        opaque_to_state(mg_core_machine:get(machine_options(Options), EventSinkID))
+        mg_core_namespace:get_machine(namespace_options(Options), EventSinkID, undefined)
     catch throw:{logic, machine_not_found} ->
         new_state()
     end.
@@ -195,18 +225,22 @@ get_state(Options, EventSinkID) ->
 new_state() ->
     #{events_range => undefined}.
 
--spec machine_options(ns_options()) ->
-    mg_core_machine:options().
-machine_options(Options = #{namespace := Namespace, storage := Storage, worker := Worker, pulse := Pulse}) ->
-    #{
-        namespace       => mg_core_utils:concatenate_namespaces(Namespace, <<"machines">>),
-        processor       => {?MODULE, Options},
-        storage         => Storage,
-        worker          => Worker,
-        pulse           => Pulse
+-spec namespace_options(start_options() | call_options()) ->
+    mg_core_namespace:start_options() | mg_core_namespace:call_options().
+namespace_options(Options) ->
+    Namespace = maps:get(namespace, Options),
+    NSOptions = maps:with([registry, pulse, storage, worker, machine, workers_manager], Options),
+    NSOptions#{
+        namespace => mg_core_utils:concatenate_namespaces(Namespace, <<"machines">>),
+        processor => {?MODULE, #{
+            name => maps:get(name, Options),
+            namespace => maps:get(namespace, Options),
+            events_storage => events_storage_options(Options),
+            pulse => maps:get(pulse, Options)
+        }}
     }.
 
--spec events_storage_options(ns_options()) ->
+-spec events_storage_options(start_options() | call_options() | processor_start_options()) ->
     mg_core_storage:options().
 events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
     {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),

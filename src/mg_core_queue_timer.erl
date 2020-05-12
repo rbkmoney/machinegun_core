@@ -33,7 +33,7 @@
     namespace := mg_core:ns(),
     scheduler_name := mg_core_scheduler:name(),
     pulse := mg_core_pulse:handler(),
-    machine := mg_core_machine:options(),
+    namespace_options := mg_core_namespace:call_options(),
     timer_queue := waiting | retrying,
     lookahead => seconds(),
     min_scan_delay => milliseconds(),
@@ -82,7 +82,7 @@ search_tasks(Options = #{timer_queue := TimerQueue}, Limit, State = #state{}) ->
     CurrentTs = mg_core_queue_task:current_time(),
     Lookahead = maps:get(lookahead, Options, 0),
     Query = {TimerQueue, 1, CurrentTs + Lookahead},
-    {Timers, Continuation} = mg_core_machine:search(machine_options(Options), Query, Limit),
+    {Timers, Continuation} = mg_core_namespace:search(namespace_options(Options), Query, Limit),
     {Tasks, LastTs} = lists:mapfoldl(
         fun ({Ts, ID}, _LastWas) -> {build_task(ID, Ts), Ts} end,
         CurrentTs,
@@ -111,9 +111,9 @@ execute_task(Options, #{id := MachineID, target_time := Timestamp}) ->
     % it's very likely that reading machine status is just unnecessary.
     Timeout = maps:get(processing_timeout, Options, ?DEFAULT_PROCESSING_TIMEOUT),
     Deadline = mg_core_deadline:from_timeout(Timeout),
-    ok = mg_core_machine:send_timeout(machine_options(Options), MachineID, Timestamp, Deadline).
+    ok = mg_core_namespace:send_timeout(namespace_options(Options), MachineID, Timestamp, Deadline).
 
--spec machine_options(options()) ->
-    mg_core_machine:options().
-machine_options(#{machine := MachineOptions}) ->
-    MachineOptions.
+-spec namespace_options(options()) ->
+    mg_core_namespace:call_options().
+namespace_options(#{namespace_options := NSOptions}) ->
+    NSOptions.

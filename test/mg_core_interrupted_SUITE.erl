@@ -29,6 +29,7 @@
 %% mg_core_machine
 -behaviour(mg_core_machine).
 -export([process_machine/7]).
+-export([get_machine/4]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -82,9 +83,9 @@ interrupted_machines_resumed(_C) ->
     IDs = [genlib:to_binary(I) || I <- lists:seq(1, N)],
     _ = [
         begin
-            ok = mg_core_machine:start(Options, ID, ?init_args, ?req_ctx, mg_core_deadline:default()),
-            ?assertEqual(undefined, mg_core_machine:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default())),
-            ?assertEqual(ok, mg_core_machine:call(Options, ID, {run, Runtime, Answer}, ?req_ctx, mg_core_deadline:default()))
+            ok = mg_core_namespace:start(Options, ID, ?init_args, ?req_ctx, mg_core_deadline:default()),
+            ?assertEqual(undefined, mg_core_namespace:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default())),
+            ?assertEqual(ok, mg_core_namespace:call(Options, ID, {run, Runtime, Answer}, ?req_ctx, mg_core_deadline:default()))
         end
     || ID <- IDs],
     ok = stop_automaton(Pid1),
@@ -92,7 +93,7 @@ interrupted_machines_resumed(_C) ->
     Pid2 = start_automaton(Options),
     ok = timer:sleep(Runtime * 2),
     _ = [
-        ?assertEqual(Answer, mg_core_machine:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default()))
+        ?assertEqual(Answer, mg_core_namespace:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default()))
     || ID <- IDs],
     ok = stop_automaton(Pid2),
 
@@ -101,6 +102,11 @@ interrupted_machines_resumed(_C) ->
 %%
 %% processor
 %%
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
+
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
 process_machine(_, _, {init, ?init_args}, _, ?req_ctx, _, null) ->
@@ -116,10 +122,10 @@ process_machine(_, _, {call, answer}, _, ?req_ctx, _, State) ->
 %%
 %% utils
 %%
--spec start_automaton(mg_core_machine:options()) ->
+-spec start_automaton(mg_core_namespace:start_options()) ->
     pid().
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
 
 -spec stop_automaton(pid()) ->
     ok.
@@ -127,7 +133,7 @@ stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid).
 
 -spec automaton_options(mg_core:ns(), mg_core_storage:name()) ->
-    mg_core_machine:options().
+    mg_core_namespace:start_options().
 automaton_options(NS, StorageName) ->
     Scheduler = #{
         min_scan_delay => 1000,
@@ -139,9 +145,7 @@ automaton_options(NS, StorageName) ->
         storage   => mg_core_ct_helper:build_storage(NS, {mg_core_storage_memory, #{
             existing_storage_name => StorageName
         }}),
-        worker    => #{
-            registry => mg_core_procreg_gproc
-        },
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
         schedulers => #{
             overseer => Scheduler

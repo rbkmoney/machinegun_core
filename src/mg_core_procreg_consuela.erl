@@ -24,12 +24,13 @@
 -export([reg_name/2]).
 -export([select/2]).
 
--export([start_link/5]).
--export([call/4]).
+-export([start_link/2]).
+-export([call/2]).
 
 -type options() :: #{
     pulse => mg_core_pulse:handler()
 }.
+-type mfargs() :: mg_core_procreg:mfargs().
 
 %%
 
@@ -48,10 +49,10 @@ reg_name(Options, Name) ->
 select(_Options, NamePattern) ->
     consuela:select(NamePattern).
 
--spec start_link(options(), mg_core_procreg:reg_name(), module(), _Args, list()) ->
+-spec start_link(options(), mfargs()) ->
     mg_core_procreg:start_link_ret().
-start_link(_Options, RegName, Module, Args, Opts) ->
-    try gen_server:start_link(RegName, Module, Args, Opts) of
+start_link(_Options, {M, F, A}) ->
+    try erlang:apply(M, F, A) of
         {ok, Pid} ->
             {ok, Pid};
         {error, {consuela, Details}} ->
@@ -63,10 +64,10 @@ start_link(_Options, RegName, Module, Args, Opts) ->
             {error, map_error(Details)}
     end.
 
--spec call(options(), mg_core_procreg:ref(), _Call, timeout()) ->
+-spec call(options(), mfargs()) ->
     _Reply.
-call(_Options, Ref, Call, Timeout) ->
-    try gen_server:call(Ref, Call, Timeout) catch
+call(_Options, {M, F, A}) ->
+    try erlang:apply(M, F, A) catch
         exit:{{consuela, Details}, _MFA}:Stacktrace ->
             erlang:raise(exit, map_error(Details), Stacktrace)
     end.
