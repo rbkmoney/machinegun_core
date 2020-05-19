@@ -24,7 +24,6 @@
 %%%
 %%% TODO
 %%%  - Streamline event interface
-%%%  - Do we even need monitors?
 %%%  - More tests
 %%%
 -module(mg_core_gen_squad).
@@ -45,8 +44,7 @@
 -type member() :: #{
     age             => age(),
     last_contact    => timestamp(),
-    loss_timer      => reference(),
-    monitor         => reference()
+    loss_timer      => reference()
 }.
 
 -type from() :: {pid(), _}.
@@ -290,17 +288,13 @@ handle_broadcast(#{msg := howdy, from := Pid, members := Pids}, St = #st{squad =
     user.
 
 -type info() ::
-    {timeout, reference(), timer()} |
-    {'DOWN', reference(), process, pid(), _Reason}.
+    {timeout, reference(), timer()}.
 
 -spec handle_info(info(), st()) ->
     noreply(st()).
 handle_info({timeout, TRef, Msg}, St) ->
     _ = beat({{timer, TRef}, {fired, Msg}}, St),
     handle_timeout(Msg, TRef, St);
-handle_info({'DOWN', MRef, process, Pid, Reason}, St = #st{squad = Squad, opts = Opts}) ->
-    _ = beat({{monitor, MRef}, {fired, Pid, Reason}}, St),
-    try_update_squad(handle_member_down(Pid, MRef, Reason, Squad, Opts), St);
 handle_info(Info, St = #st{squad = Squad}) ->
     invoke_callback(handle_info, [Info, get_rank(St), Squad], try_cancel_st_timer(user, St)).
 
@@ -456,7 +450,7 @@ remove_member(_Pid, _Member, _Reason, Squad, _Opts) ->
 -spec watch_member(pid(), opts()) ->
     member().
 watch_member(Pid, Opts) when Pid /= self() ->
-    defer_loss(Pid, start_monitor(Pid, #{}, Opts), Opts);
+    defer_loss(Pid, #{}, Opts);
 watch_member(Pid, _Opts) when Pid == self() ->
     #{}.
 
@@ -473,10 +467,7 @@ rewatch_member(Pid, Member, _Opts) when Pid == self() ->
     member().
 unwatch_member(Member = #{loss_timer := TRef}, Opts) ->
     ok = cancel_timer(TRef, Opts),
-    unwatch_member(maps:remove(loss_timer, Member), Opts);
-unwatch_member(Member = #{monitor := MRef}, Opts) ->
-    ok = cancel_monitor(MRef, Opts),
-    unwatch_member(maps:remove(monitor, Member), Opts);
+    maps:remove(loss_timer, Member);
 unwatch_member(Member = #{}, _Opts) ->
     Member.
 
@@ -491,18 +482,6 @@ defer_loss(Pid, Member, Opts = #{heartbeat := #{loss_timeout := Timeout}}) ->
 handle_loss_timeout(TRef, Pid, Squad, Opts) ->
     {TRef, Member} = maps:take(loss_timer, maps:get(Pid, Squad)),
     remove_member(Pid, Member, lost, Squad, Opts).
-
--spec start_monitor(pid(), member(), opts()) ->
-    member().
-start_monitor(Pid, Member, Opts) ->
-    false = maps:is_key(monitor, Member),
-    Member#{monitor => start_monitor(Pid, Opts)}.
-
--spec handle_member_down(pid(), reference(), _Reason, squad(), opts()) ->
-    squad().
-handle_member_down(Pid, MRef, Reason, Squad, Opts) ->
-    {MRef, Member} = maps:take(monitor, maps:get(Pid, Squad)),
-    remove_member(Pid, Member, {down, Reason}, Squad, Opts).
 
 -spec account_heartbeat(member()) ->
     member().
@@ -597,20 +576,6 @@ cancel_timer(TRef, Opts) ->
         false -> receive {timeout, TRef, _} -> ok after 0 -> ok end;
         _Time -> ok
     end.
-
--spec start_monitor(pid(), opts()) ->
-    reference().
-start_monitor(Pid, Opts) ->
-    MRef = erlang:monitor(process, Pid),
-    _ = beat({{monitor, MRef}, {started, Pid}}, Opts),
-    MRef.
-
--spec cancel_monitor(reference(), opts()) ->
-    ok.
-cancel_monitor(MRef, Opts) ->
-    true = erlang:demonitor(MRef, [flush]),
-    _ = beat({{monitor, MRef}, cancelled}, Opts),
-    ok.
 
 %%
 

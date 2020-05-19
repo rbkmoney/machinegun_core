@@ -74,7 +74,7 @@ squad_view_consistency_holds(_) ->
     N = 5,
     Opts = #{
         pulse => {?MODULE, erlang:system_time(millisecond)},
-        heartbeat => #{broadcast_interval => 200},
+        heartbeat => #{broadcast_interval => 200, loss_timeout => 500},
         discovery => #{initial_interval => 200, refresh_interval => 1000},
         promotion => #{min_squad_age => 3}
     },
@@ -100,7 +100,7 @@ squad_shrinks_consistently(_) ->
     N = 5,
     Opts = #{
         pulse => {?MODULE, erlang:system_time(millisecond)},
-        heartbeat => #{broadcast_interval => 200},
+        heartbeat => #{broadcast_interval => 200, loss_timeout => 500},
         discovery => #{initial_interval => 200, refresh_interval => 1000},
         promotion => #{min_squad_age => 3}
     },

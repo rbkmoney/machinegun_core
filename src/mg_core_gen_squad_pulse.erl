@@ -34,10 +34,6 @@
         {started, _Timeout :: non_neg_integer(), _Msg} |
         cancelled |
         {fired, _Msg}} |
-    {{monitor, reference()},
-        {started, pid()} |
-        cancelled |
-        {fired, pid(), _Reason}} |
     {unexpected,
         {{call, _From} | cast | info, _Payload}}.
 
