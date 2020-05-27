@@ -27,6 +27,7 @@
 %% tests
 -export([get_events_test/1]).
 -export([continuation_repair_test/1]).
+-export([get_corrupted_machine_fails/1]).
 
 %% mg_core_events_machine handler
 -behaviour(mg_core_events_machine).
@@ -36,6 +37,10 @@
 %% mg_core_events_sink handler
 -behaviour(mg_core_events_sink).
 -export([add_events/6]).
+
+%% mg_core_storage callbacks
+-behaviour(mg_core_storage).
+-export([child_spec/2, do_request/2]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -71,7 +76,8 @@
 all() ->
     [
        get_events_test,
-       continuation_repair_test
+       continuation_repair_test,
+       get_corrupted_machine_fails
     ].
 
 -spec init_per_suite(config()) ->
@@ -230,6 +236,37 @@ continuation_repair_test(_C) ->
     ?assertEqual([{1, 1}, {2, 2}, {3, 3}], get_history(Options, MachineID)),
     ok = stop_automaton(Pid).
 
+-spec get_corrupted_machine_fails(config()) -> any().
+get_corrupted_machine_fails(_C) ->
+    NS = <<"corruption">>,
+    MachineID = genlib:to_binary(?FUNCTION_NAME),
+    LoseEvery = 4,
+    ProcessorOpts = #{
+        signal_handler => fun ({init, <<>>}, AuxState, []) ->
+            {AuxState, [], #{}}
+        end,
+        call_handler => fun ({emit, N}, AuxState, _) ->
+            {ok, AuxState, [I || I <- lists:seq(1, N)], #{}}
+        end
+    },
+    BaseOptions = events_machine_options(
+        #{event_stash_size => 0},
+        #{},
+        ProcessorOpts,
+        NS
+    ),
+    LossyStorage = {?MODULE, #{
+        lossfun => fun (I) -> (I rem LoseEvery) == 0 end,
+        storage => {mg_core_storage_memory, #{}}
+    }},
+    EventsStorage = mg_core_ct_helper:build_storage(<<NS/binary, "_events">>, LossyStorage),
+    {Pid, Options} = start_automaton(BaseOptions#{events_storage => EventsStorage}),
+    ok = start(Options, MachineID, <<>>),
+    _ = ?assertEqual([], get_history(Options, MachineID)),
+    ok = call(Options, MachineID, {emit, LoseEvery * 2}),
+    _ = ?assertError(_, get_history(Options, MachineID)),
+    ok = stop_automaton(Pid).
+
 %% Processor handlers
 
 -spec process_signal(options(), req_ctx(), deadline(), mg_core_events_machine:signal_args()) -> signal_result().
@@ -298,6 +335,30 @@ dummy_repair_handler(_Args, AuxState, _Events) ->
 dummy_sink_handler(_Events) ->
     ok.
 
+%% Lossy storage
+
+-spec child_spec(map(), atom()) ->
+    supervisor:child_spec() | undefined.
+child_spec(#{name := Name, storage := {Module, Options}}, ChildID) ->
+    mg_core_storage:child_spec({Module, Options#{name => Name}}, ChildID).
+
+-spec do_request(map(), mg_core_storage:request()) ->
+    mg_core_storage:response().
+do_request(Options = #{lossfun := LossFun}, Req = {put, _Key, Context, BodyOpaque, _}) ->
+    % Yeah, no easy way to know MachineID here, we're left with Body only
+    #{body := {_MD, Data}} = mg_core_events:kv_to_event({<<"42">>, BodyOpaque}),
+    case LossFun(decode(Data)) of
+        true  -> Context; % should be indistinguishable from write loss
+        false -> delegate_request(Options, Req)
+    end;
+do_request(Options, Req) ->
+    delegate_request(Options, Req).
+
+-spec delegate_request(map(), mg_core_storage:request()) ->
+    mg_core_storage:response().
+delegate_request(#{name := Name, pulse := Pulse, storage := {Module, Options}}, Req) ->
+    mg_core_storage:do_request({Module, Options#{name => Name, pulse => Pulse}}, Req).
+
 %% Utils
 
 -spec start_automaton(options(), mg_core:ns()) ->
@@ -365,7 +426,7 @@ events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
                 overseer       => Scheduler
             }
         },
-        events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_sink">>, Storage)
+        events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_events">>, Storage)
     }.
 
 -spec start(mg_core_events_machine:options(),  mg_core:id(), term()) ->
