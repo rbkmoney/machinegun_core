@@ -665,9 +665,13 @@ storage_event_getter(Options, ID) ->
             mg_core_storage:new_batch(),
             Range
         ),
-        [kv_to_event(ID, {Key, Value}) ||
-            {{get, Key}, {_Context, Value}} <- mg_core_storage:run_batch(StorageOptions, Batch)
-        ]
+        BatchResults = mg_core_storage:run_batch(StorageOptions, Batch),
+        lists:map(
+            fun ({{get, Key}, {_Context, Value}}) ->
+                kv_to_event(ID, {Key, Value})
+            end,
+            BatchResults
+        )
     end.
 
 -spec event_list_getter([mg_core_events:event()]) ->
