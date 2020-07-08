@@ -33,7 +33,7 @@ build('machinegun_core', 'docker-host', finalHook) {
     pipeErlangLib = load("${env.JENKINS_LIB}/pipeErlangLib.groovy")
   }
 
-  pipeErlangService.runPipe(true,true)
+  pipeErlangLib.runPipe(true,true)
 }
 
 
