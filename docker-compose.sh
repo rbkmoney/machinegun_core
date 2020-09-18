@@ -38,7 +38,7 @@ services:
       - kafka3
 
   riakdb:
-    image: basho/riak-kv:ubuntu-2.2.3
+    image: dr2.rbkmoney.com/rbkmoney/riak-base:d9dec1c4a69482f5c013bb155f6ccd18cd9d4653
     environment:
       - CLUSTER_NAME=riakkv
     labels:
