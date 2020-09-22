@@ -141,9 +141,9 @@ start_link(Options) ->
     mg_core_utils_supervisor_wrapper:start_link(
         #{strategy => one_for_all},
         mg_core_utils:lists_compact([
-            mg_core_storage     :child_spec(events_storage_options(Options), events_storage),
-            mg_core_machine_tags:child_spec(tags_machine_options  (Options), tags     ),
-            mg_core_machine     :child_spec(machine_options       (Options), automaton)
+            mg_core_events_storage:child_spec(Options),
+            mg_core_machine_tags  :child_spec(tags_machine_options  (Options), tags     ),
+            mg_core_machine       :child_spec(machine_options       (Options), automaton)
         ])
     ).
 
@@ -279,7 +279,9 @@ process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) ->
     ReqCtx :: request_context(),
     Deadline :: deadline(),
     State :: state(),
-    Result :: {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} | no_return().
+    Result ::
+        {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} |
+        no_return().
 process_machine_(Options, ID, Subj=timeout, PCtx, ReqCtx, Deadline, State=#{timer := {_, _, _, HRange}}) ->
     NewState = State#{timer := undefined},
     process_machine_(Options, ID, {Subj, {undefined, HRange}}, PCtx, ReqCtx, Deadline, NewState);
@@ -337,7 +339,9 @@ process_machine_(Options, ID, continuation, PCtx, ReqCtx, Deadline, State0 = #{d
     Machine :: machine(),
     EventsRange :: mg_core_events:events_range(),
     State :: state(),
-    Result :: {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} | no_return().
+    Result ::
+        {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} |
+        no_return().
 process_machine_std(Options, ReqCtx, Deadline, repair, Args , Machine, EventsRange, State) ->
     case process_repair(Options, ReqCtx, Deadline, Args , Machine, EventsRange) of
         {ok, {Reply, DelayedActions}} ->
@@ -392,14 +396,8 @@ split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEve
 
 -spec store_events(options(), mg_core:id(), request_context(), [mg_core_events:event()]) ->
     ok.
-store_events(Options, ID, _, Events) ->
-    lists:foreach(
-        fun({Key, Value}) ->
-            _ = mg_core_storage:put(events_storage_options(Options), Key, undefined, Value, [])
-        end,
-        events_to_kvs(ID, Events)
-    ).
-
+store_events(Options, ID, _RequestContext, Events) ->
+    mg_core_events_storage:store_events(Options, ID, Events).
 
 -spec push_events_to_event_sinks(options(), mg_core:id(), request_context(), deadline(), [mg_core_events:event()]) ->
     ok.
@@ -561,12 +559,6 @@ machine_options(Options = #{machines := MachinesOptions}) ->
         processor => {?MODULE, Options}
     }.
 
--spec events_storage_options(options()) ->
-    mg_core_storage:options().
-events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
-    {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
-    {Mod, Options#{name => {NS, ?MODULE, events}, pulse => Handler}}.
-
 -spec tags_machine_options(options()) ->
     mg_core_machine_tags:options().
 tags_machine_options(#{tagging := Options}) ->
@@ -655,23 +647,8 @@ concat_events(Events, Acc) ->
 -spec storage_event_getter(options(), mg_core:id()) ->
     event_getter().
 storage_event_getter(Options, ID) ->
-    StorageOptions = events_storage_options(Options),
     fun (Range) ->
-        Batch = mg_core_dirange:fold(
-            fun (EventID, Acc) ->
-                Key = mg_core_events:add_machine_id(ID, mg_core_events:event_id_to_key(EventID)),
-                mg_core_storage:add_batch_request({get, Key}, Acc)
-            end,
-            mg_core_storage:new_batch(),
-            Range
-        ),
-        BatchResults = mg_core_storage:run_batch(StorageOptions, Batch),
-        lists:map(
-            fun ({{get, Key}, {_Context, Value}}) ->
-                kv_to_event(ID, {Key, Value})
-            end,
-            BatchResults
-        )
+        mg_core_events_storage:get_events(Options, ID, Range)
     end.
 
 -spec event_list_getter([mg_core_events:event()]) ->
@@ -796,17 +773,6 @@ opaque_to_state([4, EventsRange, AuxState, DelayedActions, Timer, Events]) ->
         delayed_actions => mg_core_events:maybe_from_opaque(DelayedActions, fun opaque_to_delayed_actions/1),
         timer           => mg_core_events:maybe_from_opaque(Timer, fun opaque_to_int_timer/1)
     }.
-
-
--spec events_to_kvs(mg_core:id(), [mg_core_events:event()]) ->
-    [mg_core_storage:kv()].
-events_to_kvs(MachineID, Events) ->
-    mg_core_events:add_machine_id(MachineID, mg_core_events:events_to_kvs(Events)).
-
--spec kv_to_event(mg_core:id(), mg_core_storage:kv()) ->
-    mg_core_events:event().
-kv_to_event(MachineID, Kv) ->
-    mg_core_events:kv_to_event(mg_core_events:remove_machine_id(MachineID, Kv)).
 
 -spec delayed_actions_to_opaque(delayed_actions()) ->
     mg_core_storage:opaque().
