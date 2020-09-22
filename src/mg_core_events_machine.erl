@@ -279,7 +279,9 @@ process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) ->
     ReqCtx :: request_context(),
     Deadline :: deadline(),
     State :: state(),
-    Result :: {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} | no_return().
+    Result ::
+        {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} |
+        no_return().
 process_machine_(Options, ID, Subj=timeout, PCtx, ReqCtx, Deadline, State=#{timer := {_, _, _, HRange}}) ->
     NewState = State#{timer := undefined},
     process_machine_(Options, ID, {Subj, {undefined, HRange}}, PCtx, ReqCtx, Deadline, NewState);
@@ -337,7 +339,9 @@ process_machine_(Options, ID, continuation, PCtx, ReqCtx, Deadline, State0 = #{d
     Machine :: machine(),
     EventsRange :: mg_core_events:events_range(),
     State :: state(),
-    Result :: {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} | no_return().
+    Result ::
+        {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()} |
+        no_return().
 process_machine_std(Options, ReqCtx, Deadline, repair, Args , Machine, EventsRange, State) ->
     case process_repair(Options, ReqCtx, Deadline, Args , Machine, EventsRange) of
         {ok, {Reply, DelayedActions}} ->

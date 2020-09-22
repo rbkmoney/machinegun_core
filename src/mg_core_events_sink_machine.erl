@@ -86,10 +86,11 @@ start_link(Options) ->
     ).
 
 
--spec add_events(options(), mg_core:ns(), mg_core:id(), [mg_core_events:event()], ReqCtx, mg_core_deadline:deadline()) ->
+-spec add_events(options(), mg_core:ns(), mg_core:id(), [mg_core_events:event()], ReqCtx, Deadline) ->
     ok
 when
-    ReqCtx:: mg_core:request_context()
+    ReqCtx :: mg_core:request_context(),
+    Deadline :: mg_core_deadline:deadline()
 .
 add_events(#{machine_id := EventSinkID} = Options, SourceNS, SourceMachineID, Events, ReqCtx, Deadline) ->
     NSOptions = maps:without([machine_id, name], Options),

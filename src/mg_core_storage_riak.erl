@@ -203,8 +203,10 @@ try_do_request(Options, ClientRef, Request) ->
             delete(Options, ClientRef, Key, Context)
     end.
 
--spec put(options(), client_ref(), mg_core_storage:key(), context(), mg_core_storage:value(), [mg_core_storage:index_update()]) ->
-    context().
+-spec put(options(), client_ref(), mg_core_storage:key(), context(), mg_core_storage:value(), IndexesUpdates) ->
+    context()
+when
+    IndexesUpdates :: [mg_core_storage:index_update()].
 put(Options = #{bucket := Bucket}, ClientRef, Key, Context, Value, IndexesUpdates) ->
     Object = to_riak_obj(Bucket, Key, Context, Value, IndexesUpdates),
     Timeout = get_option(request_timeout, Options),
@@ -331,8 +333,10 @@ common_index_opts(Options) ->
 -define(schema_version_md_key, <<"schema-version">>   ).
 -define(schema_version_1     , <<"1">>                ).
 
--spec to_riak_obj(bucket(), mg_core_storage:key(), context(), mg_core_storage:value(), [mg_core_storage:index_update()]) ->
-    riakc_obj:riakc_obj().
+-spec to_riak_obj(bucket(), mg_core_storage:key(), context(), mg_core_storage:value(), IndexesUpdates) ->
+    riakc_obj:riakc_obj()
+when
+    IndexesUpdates :: [mg_core_storage:index_update()].
 to_riak_obj(Bucket, Key, Context, Value, IndexesUpdates) ->
     Object = riakc_obj:set_vclock(new_riak_object(Bucket, Key, Value), Context),
     riakc_obj:update_content_type(
