@@ -91,8 +91,7 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
 -spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) ->
     ok.
 store_event(Options, ID, Event) ->
-    {Key, Value} = mg_core_events:add_machine_id(ID, mg_core_events:event_to_kv(Event)),
-    mg_core_storage:put(events_storage_options(Options), Key, undefined, Value, []).
+    mg_core_events_storage:store_event(Options, ID, Event).
 
 -spec filter_outdated_history(options(), [mg_core_events:event()]) ->
     [mg_core_events:event()].
@@ -125,16 +124,3 @@ event_to_machine_event(NS, ID, Event) ->
 call_handler(#{handler := Handler}, ReqCtx, MachineEvent) ->
     % TODO обработка ошибок?
     mg_core_utils:apply_mod_opts(Handler, modernize_event, [ReqCtx, MachineEvent]).
-
-%%
-%% options manipulation
-%%
-%% TODO
-%% На самом деле это кусок имплементации mg_core_events_machine, такого быть не должно. Возможно стоит
-%% пересмотреть граф зависимостей, например выделить mg_core_events_storage в виде отдельного модуля.
-
--spec events_storage_options(mg_core_events_machine:options()) ->
-    mg_core_storage:options().
-events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
-    {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
-    {Mod, Options#{name => {NS, mg_core_events_machine, events_storage}, pulse => Handler}}.
