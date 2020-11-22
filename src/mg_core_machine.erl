@@ -175,10 +175,11 @@
 
 %%
 
+-type call_context() :: term(). % в OTP он не описан, а нужно бы :(
 -type processing_state() :: term().
 % контест обработки, сбрасывается при выгрузке машины
 -type processing_context() :: #{
-    call_context => mg_core_worker:call_context(),
+    call_context => call_context(),
     state        => processing_state()
 } | undefined.
 -type processor_impact() ::
@@ -446,7 +447,7 @@ handle_load(ID, Options, ReqCtx) ->
     },
     load_storage_machine(ReqCtx, State).
 
--spec handle_call(_Call, mg_core_worker:call_context(), maybe(request_context()), deadline(), state()) ->
+-spec handle_call(_Call, call_context(), maybe(request_context()), deadline(), state()) ->
     {{reply, _Resp} | noreply, state()}.
 handle_call(Call, CallContext, ReqCtx, Deadline, S=#{storage_machine:=StorageMachine}) ->
     PCtx = new_processing_context(CallContext),
@@ -518,7 +519,7 @@ handle_unload(State) ->
 %%
 %% processing context
 %%
--spec new_processing_context(mg_core_worker:call_context()) ->
+-spec new_processing_context(call_context()) ->
     processing_context().
 new_processing_context(CallContext) ->
     #{

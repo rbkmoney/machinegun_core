@@ -21,7 +21,6 @@
 -export_type([call_options/0]).
 -export_type([call_payload/0]).
 -export_type([call_reply/0]).
--export_type([call_context/0]).
 -export_type([shutdown/0]).
 
 -export([child_spec/2]).
@@ -48,7 +47,6 @@
 }.
 -type call_payload() :: term().
 -type call_reply() :: term().
--type call_context() :: term(). % в OTP он не описан, а нужно бы :(
 -type shutdown() :: brutal_kill | timeout().  % like supervisor:shutdown()
 
 %% Internal types
