@@ -388,8 +388,8 @@ add_tag(Options, ID, ReqCtx, Deadline, Tag) ->
                 false ->
                     % это забытый после удаления тэг
                     ok = mg_core_machine_tags:replace(
-                            tags_options(Options), Tag, ID, ReqCtx, Deadline
-                        )
+                        tags_options(Options), Tag, OtherMachineID, ID, ReqCtx, Deadline
+                    )
             end
     end.
 

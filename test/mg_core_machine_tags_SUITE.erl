@@ -16,19 +16,21 @@
 
 -module(mg_core_machine_tags_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 %% tests descriptions
--export([all           /0]).
--export([groups        /0]).
+-export([all/0]).
+-export([groups/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
--export([tag           /1]).
+-export([tag/1]).
 -export([idempotent_tag/1]).
--export([double_tag    /1]).
--export([replace       /1]).
--export([resolve       /1]).
+-export([double_tag/1]).
+-export([replace/1]).
+-export([invalid_replace/1]).
+-export([resolve/1]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -56,6 +58,7 @@ groups() ->
             idempotent_tag,
             double_tag,
             replace,
+            invalid_replace,
             resolve
         ]}
     ].
@@ -90,7 +93,7 @@ end_per_suite(C) ->
 -spec tag(config()) ->
     _.
 tag(_C) ->
-    ok = mg_core_machine_tags:add(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
+    ?assertEqual(ok, mg_core_machine_tags:add(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default())).
 
 -spec idempotent_tag(config()) ->
     _.
@@ -100,18 +103,33 @@ idempotent_tag(C) ->
 -spec double_tag(config()) ->
     _.
 double_tag(_C) ->
-    {already_exists, ?ID} =
-        mg_core_machine_tags:add(automaton_options(), ?TAG, ?OTHER_ID, null, mg_core_deadline:default()).
+    ?assertEqual(
+        {already_exists, ?ID},
+        mg_core_machine_tags:add(automaton_options(), ?TAG, ?OTHER_ID, null, mg_core_deadline:default())
+    ).
 
 -spec replace(config()) ->
     _.
 replace(_C) ->
-    ok = mg_core_machine_tags:replace(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
+    ?assertEqual(
+        ok,
+        mg_core_machine_tags:replace(automaton_options(), ?TAG, ?ID, ?OTHER_ID, null, mg_core_deadline:default())
+    ).
+
+-spec invalid_replace(config()) ->
+    _.
+invalid_replace(_C) ->
+    ?assertEqual(
+        {invalid_old_id, ?OTHER_ID},
+        mg_core_machine_tags:replace(
+            automaton_options(), ?TAG, ?ID, ?OTHER_ID, null, mg_core_deadline:default()
+        )
+    ).
 
 -spec resolve(config()) ->
     _.
 resolve(_C) ->
-    ?ID = mg_core_machine_tags:resolve(automaton_options(), ?TAG).
+    ?assertEqual(?OTHER_ID, mg_core_machine_tags:resolve(automaton_options(), ?TAG)).
 
 %%
 %% utils

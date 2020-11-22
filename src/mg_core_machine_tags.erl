@@ -23,7 +23,7 @@
 
 -export([child_spec/2]).
 -export([add/5]).
--export([replace/5]).
+-export([replace/6]).
 -export([resolve/2]).
 -export([is_target_exist/2]).
 
@@ -86,13 +86,13 @@ add(Options, Tag, ID, ReqCtx, Deadline) ->
         undefined
     ).
 
--spec replace(call_options(), tag(), mg_core:id(), req_ctx(), deadline()) ->
+-spec replace(call_options(), tag(), mg_core:id(), mg_core:id(), req_ctx(), deadline()) ->
     ok | no_return().
-replace(Options, Tag, ID, ReqCtx, Deadline) ->
+replace(Options, Tag, OldMachineID, NewMachineID, ReqCtx, Deadline) ->
     mg_core_namespace:call_with_lazy_start(
         namespace_options(Options),
         Tag,
-        {replace, ID},
+        {replace, OldMachineID, NewMachineID},
         ReqCtx,
         Deadline,
         undefined
@@ -139,21 +139,33 @@ process_machine(_Options, _ID, {init, undefined}, _PCtx, _ReqCtx, _Deadline, _Pa
     {{reply, ok}, sleep, state_to_opaque(undefined)};
 process_machine(_Options, _ID, {repair, undefined}, _PCtx, _ReqCtx, _Deadline, PackedState) ->
     {{reply, ok}, sleep, PackedState};
-process_machine(_Options, _ID, {call, {add, ID}}, _PCtx, _ReqCtx, _Deadline, PackedState) ->
-    case opaque_to_state(PackedState) of
-        undefined ->
-            {{reply, ok}, sleep, state_to_opaque(ID)};
-        ID ->
-            {{reply, ok}, sleep, PackedState};
-        OtherID ->
-            {{reply, {already_exists, OtherID}}, sleep, PackedState}
-    end;
-process_machine(_Options, _ID, {call, {replace, ID}}, _PCtx, _ReqCtx, _Deadline, _PackedState) ->
-    {{reply, ok}, sleep, state_to_opaque(ID)}.
+process_machine(_Options, _ID, {call, Call}, _PCtx, _ReqCtx, _Deadline, PackedState) ->
+    {Reply, NewState} = handle_call(Call, opaque_to_state(PackedState)),
+    {{reply, Reply}, sleep, state_to_opaque(NewState)}.
 
 %%
 %% local
 %%
+
+-spec handle_call(Call :: term(), state()) ->
+    {Reply :: term(), state()}.
+handle_call({add, ID}, State) ->
+    case State of
+        undefined ->
+            {ok, ID};
+        ID ->
+            {ok, State};
+        OtherID ->
+            {{already_exists, OtherID}, State}
+    end;
+handle_call({replace, OldMachineID, NewMachineID}, State) ->
+    case State of
+        OldMachineID ->
+            {ok, NewMachineID};
+        OtherID ->
+            {{invalid_old_id, OtherID}, State}
+    end.
+
 -spec namespace_options(start_options() | call_options()) ->
     mg_core_namespace:start_options() | mg_core_namespace:call_options().
 namespace_options(Options) ->
