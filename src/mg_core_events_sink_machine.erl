@@ -132,10 +132,13 @@ get_history(#{machine_id := EventSinkID} = Options, HistoryRange) ->
         mg_core_storage:new_batch(),
         mg_core_events:intersect_range(EventsRange, HistoryRange)
     ),
-    Kvs = [{Key, Value} ||
-        {{get, Key}, {_Context, Value}} <- mg_core_storage:run_batch(StorageOptions, Batch)
-    ],
-    kvs_to_sink_events(EventSinkID, Kvs).
+    BatchResults = mg_core_storage:run_batch(StorageOptions, Batch),
+    lists:map(
+        fun ({{get, Key}, {_Context, Value}}) ->
+            kv_to_sink_event(EventSinkID, {Key, Value})
+        end,
+        BatchResults
+    ).
 
 -spec repair(call_options(), mg_core:request_context(), mg_core_deadline:deadline()) ->
     ok.
@@ -299,7 +302,7 @@ opaque_to_sink_event_body(_Vsn, [1, SourceNS, SourceMachineID, Event]) ->
 sink_event_to_kv(EventSinkID, Event) ->
     mg_core_events:add_machine_id(EventSinkID, mg_core_events:event_to_kv(Event, fun sink_event_body_to_opaque/2)).
 
--spec kvs_to_sink_events(mg_core:id(), [mg_core_storage:kv()]) ->
-    [event()].
-kvs_to_sink_events(EventSinkID, Kvs) ->
-    mg_core_events:kvs_to_events(mg_core_events:remove_machine_id(EventSinkID, Kvs), fun opaque_to_sink_event_body/2).
+-spec kv_to_sink_event(mg_core:id(), mg_core_storage:kv()) ->
+    event().
+kv_to_sink_event(EventSinkID, Kvs) ->
+    mg_core_events:kv_to_event(mg_core_events:remove_machine_id(EventSinkID, Kvs), fun opaque_to_sink_event_body/2).

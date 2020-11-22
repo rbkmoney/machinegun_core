@@ -50,9 +50,9 @@
 
 -spec modernize_machine(options(), mg_core_namespace:call_options(), request_context(), ref(), history_range()) ->
     ok.
-modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
+modernize_machine(Options, NamespaceOptions, ReqCtx, Ref, HRange) ->
     #{ns := NS, id := ID, history := History} =
-        mg_core_events_machine:get_machine(EventsMachineOptions, Ref, HRange),
+        mg_core_events_machine:get_machine(NamespaceOptions, Ref, HRange),
     OutdatedHistory = filter_outdated_history(Options, History),
     lists:foreach(
         fun (Event) ->
@@ -61,7 +61,7 @@ modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
                 Event ->
                     ok;
                 ModernizedEvent ->
-                    store_event(EventsMachineOptions, ID, ModernizedEvent)
+                    store_event(NamespaceOptions, ID, ModernizedEvent)
             end
         end,
         OutdatedHistory
@@ -90,9 +90,9 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
 
 -spec store_event(mg_core_namespace:call_options(), mg_core:id(), mg_core_events:event()) ->
     ok.
-store_event(Options, ID, Event) ->
-    {Key, Value} = mg_core_events:add_machine_id(ID, mg_core_events:event_to_kv(Event)),
-    mg_core_storage:put(events_storage_options(Options), Key, undefined, Value, []).
+store_event(NamespaceOptions, ID, Event) ->
+    EventsMachineOptions = get_events_machine_options(NamespaceOptions),
+    mg_core_events_storage:store_event(EventsMachineOptions, ID, Event).
 
 -spec filter_outdated_history(options(), [mg_core_events:event()]) ->
     [mg_core_events:event()].
@@ -126,17 +126,9 @@ call_handler(#{handler := Handler}, ReqCtx, MachineEvent) ->
     % TODO обработка ошибок?
     mg_core_utils:apply_mod_opts(Handler, modernize_event, [ReqCtx, MachineEvent]).
 
-%%
-%% options manipulation
-%%
-%% TODO
-%% На самом деле это кусок имплементации mg_core_events_machine, такого быть не должно. Возможно стоит
-%% пересмотреть граф зависимостей, например выделить mg_core_events_storage в виде отдельного модуля.
-
--spec events_storage_options(mg_core_namespace:call_options()) ->
-    mg_core_storage:options().
-events_storage_options(Options) ->
-    #{namespace := NS, pulse := Handler, processor := Processor} = Options,
-    {mg_core_events_machine, #{events_storage := StorageOptions}} = Processor,
-    {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
-    {Mod, Options#{name => {NS, mg_core_events_machine, events_storage}, pulse => Handler}}.
+-spec get_events_machine_options(mg_core_namespace:call_options()) ->
+    mg_core_events_machine:call_options().
+get_events_machine_options(NamespaceOptions) ->
+    #{processor := Processor} = NamespaceOptions,
+    {mg_core_events_machine, EventsMachineOptions} = Processor,
+    EventsMachineOptions.

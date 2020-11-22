@@ -203,8 +203,12 @@ get_status(Options, ID) ->
 is_exist(Options, ID) ->
     mg_core_machine:is_exist(machine_call_options(Options), ID).
 
--spec search(call_options(), mg_core_machine:search_query(), mg_core_storage:index_limit(), mg_core_storage:continuation()) ->
-    mg_core_storage:search_result() | no_return().
+-spec search(Options, Query, Limit, Continuation) -> Result when
+    Options :: call_options(),
+    Query :: mg_core_machine:search_query(),
+    Limit :: mg_core_storage:index_limit(),
+    Continuation :: mg_core_storage:continuation(),
+    Result :: mg_core_storage:search_result() | no_return().
 search(Options, Query, Limit, Continuation) ->
     mg_core_machine:search(machine_call_options(Options), Query, Limit, Continuation).
 
