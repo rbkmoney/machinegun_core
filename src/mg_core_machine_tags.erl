@@ -38,7 +38,6 @@
     pulse := mg_core_pulse:handler(),
     storage := mg_core_namespace:storage_options(),
     target := mg_core_namespace:call_options(),
-    worker => mg_core_namespace:worker_options(),
     machine => mg_core_namespace:machine_options(),
     workers_manager => mg_core_namespace:workers_manager_start_options()
 }.

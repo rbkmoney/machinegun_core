@@ -22,7 +22,6 @@
 -export_type([start_options/0]).
 -export_type([call_options/0]).
 -export_type([storage_options/0]).
--export_type([worker_options/0]).
 -export_type([machine_options/0]).
 -export_type([schedulers_options/0]).
 -export_type([workers_manager_start_options/0]).
@@ -55,7 +54,6 @@
     pulse := mg_core_pulse:handler(),
     storage := storage_options(),
     processor := mg_core_machine:processor_start_options(),
-    worker => worker_options(),
     machine => machine_options(),
     schedulers => schedulers_options(),
     workers_manager => workers_manager_start_options()
@@ -105,10 +103,8 @@
     message_queue_len_limit => mg_core_workers_manager:queue_limit()
 }.
 -type workers_manager_call_options() :: #{
-    message_queue_len_limit => mg_core_workers_manager:queue_limit()
-}.
--type worker_options() :: #{
-    shutdown => mg_core_worker:shutdown()
+    message_queue_len_limit => mg_core_workers_manager:queue_limit(),
+    shutdown => mg_core_workers_manager:shutdown()
 }.
 -type machine_options() :: #{
     retries => mg_core_machine:retry_opt(),
@@ -256,7 +252,7 @@ machine_sup_child_spec(Options, ChildID) ->
         start    => {mg_core_utils_supervisor_wrapper, start_link, [
             #{strategy => rest_for_one},
             mg_core_utils:lists_compact([
-                mg_core_machine:child_spec(machine_start_options(Options), machine),
+                mg_core_machine:processor_child_spec(machine_start_options(Options), machine),
                 mg_core_workers_manager:child_spec(manager_start_options(Options), manager)
             ])
         ]},
@@ -386,7 +382,7 @@ manager_start_options(Options) ->
     ManagerOptions = maps:get(workers_manager, Options, #{}),
     ManagerOptions#{
         pulse => Pulse,
-        worker => worker_start_options(Options),
+        worker => {mg_core_machine, machine_start_options(Options)},
         registry => Registry,
         namespace => NS
     }.
@@ -402,28 +398,9 @@ manager_call_options(Options) ->
     ManagerOptions = maps:get(workers_manager, Options, #{}),
     ManagerOptions#{
         pulse => Pulse,
-        worker => worker_call_options(Options),
+        worker => {mg_core_machine, machine_call_options(Options)},
         registry => Registry,
         namespace => NS
-    }.
-
--spec worker_start_options(start_options()) ->
-    mg_core_worker:start_options().
-worker_start_options(Options) ->
-    #{
-        namespace := NS
-    } = Options,
-    WorkerOptions = maps:get(worker, Options, #{}),
-    WorkerOptions#{
-        namespace => NS,
-        handler => {mg_core_machine, machine_start_options(Options)}
-    }.
-
--spec worker_call_options(call_options()) ->
-    mg_core_worker:call_options().
-worker_call_options(Options) ->
-    #{
-        handler => {mg_core_machine, machine_call_options(Options)}
     }.
 
 -spec machine_start_options(start_options()) ->

@@ -56,7 +56,6 @@
     storage := mg_core_namespace:storage_options(),
     events_storage := storage_options(),
     machine_id := mg_core:id(),
-    worker => mg_core_namespace:worker_options(),
     machine => mg_core_namespace:machine_options(),
     workers_manager => mg_core_namespace:workers_manager_start_options()
 }.

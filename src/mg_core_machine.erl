@@ -23,7 +23,7 @@
 %%%
 -module(mg_core_machine).
 
--behaviour(mg_core_worker).
+-behaviour(mg_core_workers_manager).
 -behaviour(gen_server).
 
 %%
@@ -86,7 +86,7 @@
 -export_type([search_query/0]).
 -export_type([machine_regular_status/0]).
 
--export([child_spec/2]).
+-export([processor_child_spec/2]).
 
 -export([get_machine/3]).
 -export([get_status/2]).
@@ -100,7 +100,7 @@
 -export([all_statuses/0]).
 -export([get_storage_machine/2]).
 
-%% mg_core_worker callbacks
+%% mg_core_workers_manager callbacks
 -export([start_link/5, call/5]).
 
 %% gen_server callbacks
@@ -238,9 +238,9 @@
 %%
 %% API
 %%
--spec child_spec(start_options(), term()) ->
+-spec processor_child_spec(start_options(), term()) ->
     supervisor:child_spec() | undefined.
-child_spec(Options, ChildID) ->
+processor_child_spec(Options, ChildID) ->
     ProcessorOptions = processor_start_options(Options),
     mg_core_utils:apply_mod_opts_if_defined(ProcessorOptions, processor_child_spec, undefined, [ChildID]).
 
@@ -299,7 +299,7 @@ reply(#{call_context := CallContext}, Reply) ->
     ok.
 
 %%
-%% mg_core_worker callbacks
+%% mg_core_workers_manager callbacks
 %%
 -spec start_link(start_options(), reg_name(), mg_core:id(), request_context(), deadline()) ->
     mg_core_utils:gen_start_ret().
