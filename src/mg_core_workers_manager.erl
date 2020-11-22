@@ -63,7 +63,7 @@
 
 %% Constants
 -define(default_message_queue_len_limit, 50).
--define(worker_wrap(NS, ID), {?MODULE, {worker, NS, ID}}).
+-define(worker_id(NS, ID), {?MODULE, {worker, NS, ID}}).
 
 %%
 %% API
@@ -211,7 +211,7 @@ worker_options(#{worker := WorkerOptions}) ->
 list(Procreg, NS) ->
     [
         {NS, ID, Pid} ||
-            {?worker_wrap(_, ID), Pid} <- mg_core_procreg:select(Procreg, ?worker_wrap(NS, '$1'))
+            {?worker_id(_, ID), Pid} <- mg_core_procreg:select(Procreg, ?worker_id(NS, '$1'))
     ].
 
 %%
@@ -278,13 +278,13 @@ self_wrap(NS) ->
     mg_core_procreg:ref().
 worker_ref(Options, ID) ->
     #{namespace := NS} = Options,
-    mg_core_procreg:ref(registry_options(Options), ?worker_wrap(NS, ID)).
+    mg_core_procreg:ref(registry_options(Options), ?worker_id(NS, ID)).
 
 -spec worker_reg_name(call_options(), mg_core:id()) ->
     mg_core_procreg:reg_name().
 worker_reg_name(Options, ID) ->
     #{namespace := NS} = Options,
-    mg_core_procreg:reg_name(registry_options(Options), ?worker_wrap(NS, ID)).
+    mg_core_procreg:reg_name(registry_options(Options), ?worker_id(NS, ID)).
 
 -spec registry_options(start_options() | call_options()) ->
     mg_core_procreg:options().
