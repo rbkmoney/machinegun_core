@@ -95,17 +95,10 @@ start_link(Options, StartMFA, Args) ->
 -spec wrap_child_spec(options(), supervisor:child_spec()) ->
     supervisor:child_spec().
 wrap_child_spec(Options, Spec) ->
-    #{start := StartMFA} = Spec,
-    Spec#{start => {?MODULE, start_link, [Options, make_mfargs(StartMFA)]}}.
+    #{start := StartMFAargs} = Spec,
+    Spec#{start => {?MODULE, start_link, [Options, StartMFAargs]}}.
 
 %% Internals
-
--spec make_mfargs({M :: module(), F :: atom(), A :: [term()] | undefined}) ->
-    mfargs().
-make_mfargs({M, F, undefined}) ->
-    {M, F, []};
-make_mfargs({M, F, Args}) ->
-    {M, F, Args}.
 
 -spec add_args(mfargs(), Agrs :: list()) ->
     mfargs().
