@@ -73,29 +73,29 @@ interrupted_machines_resumed(_C) ->
     NS = genlib:to_binary(?FUNCTION_NAME),
     {ok, StoragePid} = mg_core_storage_memory:start_link(#{name => ?MODULE}),
     true = erlang:unlink(StoragePid),
-    Options = automaton_options(NS, ?MODULE),
+    NSOptions = namespace_options(NS, ?MODULE),
 
     N = 8,
     Runtime = 1000,
     Answer = 42,
 
-    Pid1 = start_automaton(Options),
+    {Pid1, OptionsRef1} = start_automaton(NSOptions),
     IDs = [genlib:to_binary(I) || I <- lists:seq(1, N)],
     _ = [
         begin
-            ok = mg_core_namespace:start(Options, ID, ?init_args, ?req_ctx, mg_core_deadline:default()),
-            ?assertEqual(undefined, mg_core_namespace:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default())),
-            ?assertEqual(ok, mg_core_namespace:call(Options, ID, {run, Runtime, Answer}, ?req_ctx, mg_core_deadline:default()))
+            ok = mg_core_namespace:start(OptionsRef1, ID, ?init_args, ?req_ctx, mg_core_deadline:default()),
+            ?assertEqual(undefined, mg_core_namespace:call(OptionsRef1, ID, answer, ?req_ctx, mg_core_deadline:default())),
+            ?assertEqual(ok, mg_core_namespace:call(OptionsRef1, ID, {run, Runtime, Answer}, ?req_ctx, mg_core_deadline:default()))
         end
     || ID <- IDs],
-    ok = stop_automaton(Pid1),
+    ok = stop_automaton(OptionsRef1, Pid1),
 
-    Pid2 = start_automaton(Options),
+    {Pid2, OptionsRef2} = start_automaton(NSOptions),
     ok = timer:sleep(Runtime * 2),
     _ = [
-        ?assertEqual(Answer, mg_core_namespace:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default()))
+        ?assertEqual(Answer, mg_core_namespace:call(OptionsRef2, ID, answer, ?req_ctx, mg_core_deadline:default()))
     || ID <- IDs],
-    ok = stop_automaton(Pid2),
+    ok = stop_automaton(OptionsRef2, Pid2),
 
     ok = proc_lib:stop(StoragePid).
 
@@ -122,19 +122,23 @@ process_machine(_, _, {call, answer}, _, ?req_ctx, _, State) ->
 %%
 %% utils
 %%
--spec start_automaton(mg_core_namespace:start_options()) ->
-    pid().
+-spec start_automaton(mg_core_namespace:options()) ->
+    {pid(), mg_core_namespace:options_ref()}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
+    OptionsRef = mg_core_namespace:make_options_ref(maps:get(namespace, Options)),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_namespace:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
-    ok = proc_lib:stop(Pid).
+stop_automaton(OptionsRef, Pid) ->
+    ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
+    ok.
 
--spec automaton_options(mg_core:ns(), mg_core_storage:name()) ->
-    mg_core_namespace:start_options().
-automaton_options(NS, StorageName) ->
+-spec namespace_options(mg_core:ns(), mg_core_storage:name()) ->
+    mg_core_namespace:options().
+namespace_options(NS, StorageName) ->
     Scheduler = #{
         min_scan_delay => 1000,
         target_cutoff  => 15

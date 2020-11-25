@@ -31,22 +31,21 @@
 
 %% Internal types
 
--type start_options() :: mg_core_events_machine:start_options().
--type call_options() :: mg_core_events_machine:call_options().
+-type options() :: mg_core_events_machine:options().
 
 %%
 
--spec child_spec(start_options()) ->
+-spec child_spec(options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
     mg_core_storage:child_spec(events_storage_options(Options), events_storage).
 
--spec store_event(start_options() | call_options(), mg_core:id(), mg_core_events:event()) ->
+-spec store_event(options(), mg_core:id(), mg_core_events:event()) ->
     ok.
 store_event(Options, ID, Event) ->
     store_events(Options, ID, [Event]).
 
--spec store_events(start_options() | call_options(), mg_core:id(), [mg_core_events:event()]) ->
+-spec store_events(options(), mg_core:id(), [mg_core_events:event()]) ->
     ok.
 store_events(Options, ID, Events) ->
     lists:foreach(
@@ -56,7 +55,7 @@ store_events(Options, ID, Events) ->
         events_to_kvs(ID, Events)
     ).
 
--spec get_events(call_options(), mg_core:id(), mg_core_events:events_range()) ->
+-spec get_events(options(), mg_core:id(), mg_core_events:events_range()) ->
     [mg_core_events:event()].
 get_events(Options, ID, Range) ->
     Batch = mg_core_dirange:fold(
@@ -77,7 +76,7 @@ get_events(Options, ID, Range) ->
 
 %%
 
--spec events_storage_options(start_options() | call_options()) ->
+-spec events_storage_options(options()) ->
     mg_core_storage:options().
 events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
     {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),

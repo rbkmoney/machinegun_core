@@ -100,10 +100,9 @@ end_per_group(_, _C) ->
 -spec simple_test(config()) ->
     _.
 simple_test(C) ->
-    Options = automaton_options(C),
     TestKey = <<"test_key">>,
     ID = <<"42">>,
-    Pid = start_automaton(Options),
+    {Pid, Options} = start_automaton(namespace_options(C)),
 
     {logic, machine_not_found} =
         (catch mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
@@ -143,7 +142,7 @@ simple_test(C) ->
     {logic, machine_not_found} =
         (catch mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
 
-    ok = stop_automaton(Pid).
+    ok = stop_automaton(Options, Pid).
 
 %%
 %% processor
@@ -176,20 +175,23 @@ process_machine(_, _, {repair, repair_arg}, _, ?req_ctx, _, [TestKey, TestValue]
 %%
 %% utils
 %%
--spec start_automaton(mg_core_namespace:start_options()) ->
-    pid().
+-spec start_automaton(mg_core_namespace:options()) ->
+    {pid(), mg_core_namespace:options_ref()}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
+    OptionsRef = mg_core_namespace:make_options_ref(maps:get(namespace, Options)),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_namespace:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRef, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
     ok.
 
--spec automaton_options(config()) ->
-    mg_core_namespace:start_options().
-automaton_options(C) ->
+-spec namespace_options(config()) ->
+    mg_core_namespace:options().
+namespace_options(C) ->
     Scheduler = #{},
     #{
         namespace => <<"test">>,

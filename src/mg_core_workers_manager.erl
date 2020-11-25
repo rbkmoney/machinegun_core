@@ -24,8 +24,7 @@
 -include_lib("machinegun_core/include/pulse.hrl").
 
 %% API
--export_type([start_options/0]).
--export_type([call_options/0]).
+-export_type([options/0]).
 -export_type([queue_limit/0]).
 -export_type([shutdown/0]).
 
@@ -38,29 +37,23 @@
 
 %% Callbacks
 
--callback start_link(worker_start_options(), gen_reg_name(), mg_core:id(), req_ctx(), deadline()) ->
+-callback start_link(worker_options(), gen_reg_name(), mg_core:id(), req_ctx(), deadline()) ->
     mg_core_utils:gen_start_ret().
 
--callback call(worker_call_options(), ref(), call(), req_ctx(), deadline()) ->
+-callback call(worker_options(), ref(), call(), req_ctx(), deadline()) ->
     call_reply().
 
 %% Types
--type start_options() :: #{
+-type options() :: #{
     namespace               := mg_core:ns(),
     registry                := mg_core_procreg:options(),
-    worker                  := mg_core_utils:mod_opts(worker_start_options()),
+    worker                  := mg_core_utils:mod_opts(worker_options()),
     pulse                   := mg_core_pulse:handler(),
     message_queue_len_limit => queue_limit(),
     sidecar                 => mg_core_utils:mod_opts(),
     shutdown                => shutdown()
 }.
--type call_options() :: #{
-    namespace               := mg_core:ns(),
-    registry                := mg_core_procreg:options(),
-    worker                  := mg_core_utils:mod_opts(worker_call_options()),
-    pulse                   := mg_core_pulse:handler(),
-    message_queue_len_limit => queue_limit()
-}.
+
 -type queue_limit() :: non_neg_integer().
 -type shutdown() :: brutal_kill | timeout().  % like supervisor:shutdown()
 
@@ -71,8 +64,7 @@
 -type gen_reg_name() :: mg_core_utils:gen_reg_name().
 -type maybe(T) :: T | undefined.
 -type deadline() :: mg_core_deadline:deadline().
--type worker_start_options() :: term().
--type worker_call_options() :: term().
+-type worker_options() :: term().
 -type ref() :: mg_core_utils:gen_ref().
 -type call() :: term().
 -type call_reply() :: term().
@@ -85,7 +77,7 @@
 %% API
 %%
 
--spec child_spec(start_options(), atom()) ->
+-spec child_spec(options(), atom()) ->
     supervisor:child_spec().
 child_spec(Options, ChildID) ->
     #{
@@ -95,7 +87,7 @@ child_spec(Options, ChildID) ->
         type     => supervisor
     }.
 
--spec start_link(start_options()) ->
+-spec start_link(options()) ->
     mg_core_utils:gen_start_ret().
 start_link(Options) ->
     mg_core_utils_supervisor_wrapper:start_link(
@@ -106,7 +98,7 @@ start_link(Options) ->
         ])
     ).
 
--spec manager_child_spec(start_options()) ->
+-spec manager_child_spec(options()) ->
     supervisor:child_spec().
 manager_child_spec(Options) ->
     Args = [
@@ -120,7 +112,7 @@ manager_child_spec(Options) ->
         type  => supervisor
     }.
 
--spec sidecar_child_spec(start_options()) ->
+-spec sidecar_child_spec(options()) ->
     supervisor:child_spec() | undefined.
 sidecar_child_spec(#{sidecar := Sidecar} = Options) ->
     mg_core_utils:apply_mod_opts(Sidecar, child_spec, [Options, sidecar]);
@@ -128,7 +120,7 @@ sidecar_child_spec(#{}) ->
     undefined.
 
 % sync
--spec call(call_options(), id(), call(), maybe(req_ctx()), deadline()) ->
+-spec call(options(), id(), call(), maybe(req_ctx()), deadline()) ->
     _Reply | {error, _}.
 call(Options, ID, Call, ReqCtx, Deadline) ->
     case mg_core_deadline:is_reached(Deadline) of
@@ -138,7 +130,7 @@ call(Options, ID, Call, ReqCtx, Deadline) ->
             {error, {transient, worker_call_deadline_reached}}
     end.
 
--spec call(call_options(), id(), call(), maybe(req_ctx()), deadline(), boolean()) ->
+-spec call(options(), id(), call(), maybe(req_ctx()), deadline(), boolean()) ->
     _Reply | {error, _}.
 call(Options, ID, Call, ReqCtx, Deadline, CanRetry) ->
     Ref = worker_ref(Options, ID),
@@ -149,7 +141,7 @@ call(Options, ID, Call, ReqCtx, Deadline, CanRetry) ->
             handle_worker_exit(Options, ID, Call, ReqCtx, Deadline, Reason, CanRetry)
     end.
 
--spec handle_worker_exit(call_options(), id(), call(), maybe(req_ctx()), deadline(), _Reason, boolean()) ->
+-spec handle_worker_exit(options(), id(), call(), maybe(req_ctx()), deadline(), _Reason, boolean()) ->
     _Reply | {error, _}.
 handle_worker_exit(Options, ID, Call, ReqCtx, Deadline, Reason, CanRetry) ->
     MaybeRetry = case CanRetry of
@@ -172,7 +164,7 @@ handle_worker_exit(Options, ID, Call, ReqCtx, Deadline, Reason, CanRetry) ->
         Unknown                -> {error, {unexpected_exit, Unknown}}
     end.
 
--spec start_and_retry_call(call_options(), id(), call(), maybe(req_ctx()), deadline()) ->
+-spec start_and_retry_call(options(), id(), call(), maybe(req_ctx()), deadline()) ->
     _Reply | {error, _}.
 start_and_retry_call(Options, ID, Call, ReqCtx, Deadline) ->
     %
@@ -190,7 +182,7 @@ start_and_retry_call(Options, ID, Call, ReqCtx, Deadline) ->
             {error, Reason}
     end.
 
--spec brutal_kill(call_options(), id()) ->
+-spec brutal_kill(options(), id()) ->
     ok.
 brutal_kill(Options, ID) ->
     case mg_core_utils:gen_reg_name_to_pid(worker_ref(Options, ID)) of
@@ -206,14 +198,14 @@ brutal_kill(Options, ID) ->
     end.
 
 
--spec is_alive(call_options(), id()) ->
+-spec is_alive(options(), id()) ->
     boolean().
 is_alive(Options, ID) ->
     Pid = mg_core_utils:gen_reg_name_to_pid(worker_ref(Options, ID)),
     Pid =/= undefined andalso erlang:is_process_alive(Pid).
 
--spec worker_and_options(start_options() | call_options()) ->
-    {module(), worker_start_options() | worker_call_options()}.
+-spec worker_and_options(options()) ->
+    {module(), worker_options()}.
 worker_and_options(#{worker := WorkerOptions}) ->
     mg_core_utils:separate_mod_opts(WorkerOptions).
 
@@ -229,7 +221,7 @@ list(Procreg, NS) ->
 %% local
 %%
 
--spec worker_child_spec(start_options(), term()) ->
+-spec worker_child_spec(options(), term()) ->
     supervisor:child_spec().
 worker_child_spec(Options, ChildID) ->
     Shutdown = maps:get(shutdown, Options, 5000),
@@ -245,7 +237,7 @@ worker_child_spec(Options, ChildID) ->
         Spec
     ).
 
--spec start_child(call_options(), id(), maybe(req_ctx()), deadline()) ->
+-spec start_child(options(), id(), maybe(req_ctx()), deadline()) ->
     {ok, pid()} | {error, term()}.
 start_child(Options, ID, ReqCtx, Deadline) ->
     SelfRef = self_ref(Options),
@@ -277,22 +269,22 @@ do_start_child(SelfRef, WorkerName, ID, ReqCtx, Deadline) ->
             {error, {timeout, Reason}}
     end.
 
--spec message_queue_len_limit(start_options() | call_options()) ->
+-spec message_queue_len_limit(options()) ->
     queue_limit().
 message_queue_len_limit(Options) ->
     maps:get(message_queue_len_limit, Options, ?default_message_queue_len_limit).
 
--spec self_ref(call_options()) ->
+-spec self_ref(options()) ->
     gen_ref().
 self_ref(Options) ->
     {via, gproc, gproc_self_key(Options)}.
 
--spec self_reg_name(start_options()) ->
+-spec self_reg_name(options()) ->
     mg_core_utils:gen_reg_name().
 self_reg_name(Options) ->
     {via, gproc, gproc_self_key(Options)}.
 
--spec gproc_self_key(start_options() | call_options()) ->
+-spec gproc_self_key(options()) ->
     gproc:key().
 gproc_self_key(Options) ->
     {n, l, self_wrap(maps:get(namespace, Options))}.
@@ -302,19 +294,19 @@ gproc_self_key(Options) ->
 self_wrap(NS) ->
     {?MODULE, {manager, NS}}.
 
--spec worker_ref(call_options(), mg_core:id()) ->
+-spec worker_ref(options(), mg_core:id()) ->
     mg_core_procreg:ref().
 worker_ref(Options, ID) ->
     #{namespace := NS} = Options,
     mg_core_procreg:ref(registry_options(Options), ?worker_id(NS, ID)).
 
--spec worker_reg_name(call_options(), mg_core:id()) ->
+-spec worker_reg_name(options(), mg_core:id()) ->
     mg_core_procreg:reg_name().
 worker_reg_name(Options, ID) ->
     #{namespace := NS} = Options,
     mg_core_procreg:reg_name(registry_options(Options), ?worker_id(NS, ID)).
 
--spec registry_options(start_options() | call_options()) ->
+-spec registry_options(options()) ->
     mg_core_procreg:options().
 registry_options(#{registry := RegistryOptions}) ->
     RegistryOptions.

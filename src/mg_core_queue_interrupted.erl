@@ -31,7 +31,7 @@
     namespace := mg_core:ns(),
     scheduler_name := mg_core_scheduler:name(),
     pulse := mg_core_pulse:handler(),
-    namespace_options := mg_core_namespace:call_options(),
+    namespace_options_ref := mg_core_namespace:options_ref(),
     min_scan_delay => milliseconds(),
     rescan_delay => milliseconds(),
     processing_timeout => timeout()
@@ -66,7 +66,7 @@ init(_Options) ->
     {{scan_delay(), [task()]}, state()}.
 search_tasks(Options, Limit, #state{continuation = Continuation} = State) ->
     CurrentTime = mg_core_queue_task:current_time(),
-    NSOptions = namespace_options(Options),
+    NSOptions = namespace_options_ref(Options),
     Query = processing,
     {IDs, NewContinuation} = mg_core_namespace:search(NSOptions, Query, Limit, Continuation),
     Tasks = [#{id => ID, machine_id => ID, target_time => CurrentTime} || ID <- IDs],
@@ -79,13 +79,13 @@ search_tasks(Options, Limit, #state{continuation = Continuation} = State) ->
 execute_task(Options, #{machine_id := MachineID}) ->
     Timeout = maps:get(processing_timeout, Options, ?DEFAULT_PROCESSING_TIMEOUT),
     Deadline = mg_core_deadline:from_timeout(Timeout),
-    ok = mg_core_namespace:resume_interrupted(namespace_options(Options), MachineID, Deadline).
+    ok = mg_core_namespace:resume_interrupted(namespace_options_ref(Options), MachineID, Deadline).
 
 %% Internals
 
--spec namespace_options(options()) ->
-    mg_core_namespace:call_options().
-namespace_options(#{namespace_options := NSOptions}) ->
+-spec namespace_options_ref(options()) ->
+    mg_core_namespace:options_ref().
+namespace_options_ref(#{namespace_options_ref := NSOptions}) ->
     NSOptions.
 
 -spec get_delay(mg_core_storage:continuation(), options()) ->

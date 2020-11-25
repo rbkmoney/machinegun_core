@@ -65,11 +65,9 @@
 -export_type([suicide_probability/0]).
 -export_type([scheduler_opt/0]).
 -export_type([schedulers_opt/0]).
--export_type([start_options/0]).
--export_type([call_options/0]).
+-export_type([options/0]).
 -export_type([storage_options/0]).
--export_type([processor_start_options/0]).
--export_type([processor_call_options/0]).
+-export_type([processor_options/0]).
 -export_type([thrown_error/0]).
 -export_type([logic_error/0]).
 -export_type([transient_error/0]).
@@ -123,24 +121,17 @@
 -type schedulers_opt() :: #{scheduler_type() => scheduler_opt()}.
 -type suicide_probability() :: float() | integer() | undefined. % [0, 1]
 
--type start_options() :: #{
+-type options() :: #{
     namespace := mg_core:ns(),
     pulse := mg_core_pulse:handler(),
     storage := storage_options(),
-    processor := processor_start_options(),
+    processor := processor_options(),
     schedulers := schedulers_opt(),
     retries => retry_opt(),
     unload_timeout => timeout(),
     hibernate_timeout => timeout(),
     suicide_probability => suicide_probability(),
     timer_processing_timeout => timeout()
-}.
-
--type call_options() :: #{
-    namespace := mg_core:ns(),
-    pulse := mg_core_pulse:handler(),
-    storage := storage_options(),
-    processor := processor_call_options()
 }.
 
 -type call() ::
@@ -154,8 +145,7 @@
 .
 
 -type storage_options() :: mg_core_storage:options().
--type processor_start_options() :: mg_core_utils:mod_opts().
--type processor_call_options() :: mg_core_utils:mod_opts().
+-type processor_options() :: mg_core_utils:mod_opts().
 -type thrown_error() :: {logic, logic_error()} | {transient, transient_error()} | {timeout, _Reason}.
 -type logic_error() :: machine_already_exist | machine_not_found | machine_failed | machine_already_working.
 -type transient_error() :: overload | {storage_unavailable, _Reason} | {processor_unavailable, _Reason} | unavailable.
@@ -238,52 +228,52 @@
 %%
 %% API
 %%
--spec processor_child_spec(start_options(), term()) ->
+-spec processor_child_spec(options(), term()) ->
     supervisor:child_spec() | undefined.
 processor_child_spec(Options, ChildID) ->
-    ProcessorOptions = processor_start_options(Options),
+    ProcessorOptions = processor_options(Options),
     mg_core_utils:apply_mod_opts_if_defined(ProcessorOptions, processor_child_spec, undefined, [ChildID]).
 
--spec call(call_options(), mg_core_utils:gen_ref(), call(), request_context(), deadline()) ->
+-spec call(options(), mg_core_utils:gen_ref(), call(), request_context(), deadline()) ->
     _Resp | throws().
 call(_Options, Ref, Call, ReqCtx, Deadline) ->
     gen_server:call(Ref, {call, Deadline, Call, ReqCtx}, mg_core_deadline:to_timeout(Deadline)).
 
--spec get_machine(call_options(), mg_core:id(), get_machine_args()) ->
+-spec get_machine(options(), mg_core:id(), get_machine_args()) ->
     processor_machine_state() | throws().
 get_machine(Options, ID, Args) ->
     {_, #{state := State}} =
         mg_core_utils:throw_if_undefined(get_storage_machine(Options, ID), {logic, machine_not_found}),
     mg_core_utils:apply_mod_opts(
-        processor_call_options(Options),
+        processor_options(Options),
         get_machine,
         [ID, Args, State]
     ).
 
--spec get_status(call_options(), mg_core:id()) ->
+-spec get_status(options(), mg_core:id()) ->
     machine_status() | throws().
 get_status(Options, ID) ->
     {_, #{status := Status}} =
         mg_core_utils:throw_if_undefined(get_storage_machine(Options, ID), {logic, machine_not_found}),
     Status.
 
--spec is_exist(call_options(), mg_core:id()) ->
+-spec is_exist(options(), mg_core:id()) ->
     boolean() | throws().
 is_exist(Options, ID) ->
     get_storage_machine(Options, ID) =/= undefined.
 
--spec search(call_options(), search_query(), mg_core_storage:index_limit(), mg_core_storage:continuation()) ->
+-spec search(options(), search_query(), mg_core_storage:index_limit(), mg_core_storage:continuation()) ->
     mg_core_storage:search_result() | throws().
 search(Options, Query, Limit, Continuation) ->
     StorageQuery = storage_search_query(Query, Limit, Continuation),
     mg_core_storage:search(storage_options(Options), StorageQuery).
 
--spec search(call_options(), search_query(), mg_core_storage:index_limit()) ->
+-spec search(options(), search_query(), mg_core_storage:index_limit()) ->
     mg_core_storage:search_result() | throws().
 search(Options, Query, Limit) ->
     mg_core_storage:search(storage_options(Options), storage_search_query(Query, Limit)).
 
--spec search(call_options(), search_query()) ->
+-spec search(options(), search_query()) ->
     mg_core_storage:search_result() | throws().
 search(Options, Query) ->
     % TODO deadline
@@ -301,7 +291,7 @@ reply(#{call_context := CallContext}, Reply) ->
 %%
 %% mg_core_workers_manager callbacks
 %%
--spec start_link(start_options(), reg_name(), mg_core:id(), request_context(), deadline()) ->
+-spec start_link(options(), reg_name(), mg_core:id(), request_context(), deadline()) ->
     mg_core_utils:gen_start_ret().
 start_link(Options, RegName, ID, ReqCtx, Deadline) ->
     Opts = [{timeout, mg_core_deadline:to_timeout(Deadline)}],
@@ -312,13 +302,13 @@ start_link(Options, RegName, ID, ReqCtx, Deadline) ->
 %%
 -type worker_state() :: #{
     id                := mg_core:id(),
-    status            := {loading, start_options(), request_context()} | {working, MachineState :: state()},
+    status            := {loading, options(), request_context()} | {working, MachineState :: state()},
     unload_tref       := reference() | undefined,
     hibernate_timeout := timeout(),
     unload_timeout    := timeout()
 }.
 
--spec init({mg_core:id(), start_options(), request_context()}) ->
+-spec init({mg_core:id(), options(), request_context()}) ->
     mg_core_utils:gen_server_init_ret(worker_state()).
 init({ID, Options, ReqCtx}) ->
     HibernateTimeout = maps:get(hibernate_timeout, Options, 5 * 1000),
@@ -418,7 +408,7 @@ all_statuses() ->
 -type state() :: #{
     id              => mg_core:id(),
     namespace       => mg_core:ns(),
-    options         => start_options(),
+    options         => options(),
     schedulers      => #{scheduler_type() => scheduler_ref()},
     storage_machine => storage_machine() | nonexistent | unknown,
     storage_context => mg_core_storage:context() | undefined
@@ -432,7 +422,7 @@ all_statuses() ->
 -type scheduler_ref() ::
     {mg_core_scheduler:id(), _TargetCutoff :: seconds()}.
 
--spec handle_load(mg_core:id(), start_options(), request_context()) ->
+-spec handle_load(mg_core:id(), options(), request_context()) ->
     {ok, state()} | {error, Reason :: any()}.
 handle_load(ID, Options, ReqCtx) ->
     Namespace = maps:get(namespace, Options),
@@ -538,7 +528,7 @@ new_storage_machine() ->
         state  => null
     }.
 
--spec get_storage_machine(call_options() | start_options(), mg_core:id()) ->
+-spec get_storage_machine(options(), mg_core:id()) ->
     {mg_core_storage:context(), storage_machine()} | undefined.
 get_storage_machine(Options, ID) ->
     try mg_core_storage:get(storage_options(Options), ID) of
@@ -841,7 +831,7 @@ process_unsafe(Impact, ProcessingCtx, ReqCtx, Deadline, State = #{storage_machin
 call_processor(Impact, ProcessingCtx, ReqCtx, Deadline, State) ->
     #{options := Options, id := ID, storage_machine := #{state := MachineState}} = State,
     mg_core_utils:apply_mod_opts(
-        processor_start_options(Options),
+        processor_options(Options),
         process_machine,
         [ID, Impact, ProcessingCtx, ReqCtx, Deadline, MachineState]
     ).
@@ -1008,14 +998,14 @@ remove_from_storage(ReqCtx, Deadline, State) ->
     }),
     State#{storage_machine := nonexistent, storage_context := undefined}.
 
--spec retry_strategy(retry_subj(), start_options(), deadline()) ->
+-spec retry_strategy(retry_subj(), options(), deadline()) ->
     mg_core_retry:strategy().
 retry_strategy(Subj, Options, Deadline) ->
     retry_strategy(Subj, Options, Deadline, undefined, undefined).
 
 -spec retry_strategy(Subj, Options, Deadline, InitialTs, Attempt) -> mg_core_retry:strategy() when
     Subj :: retry_subj(),
-    Options :: start_options(),
+    Options :: options(),
     Deadline :: deadline(),
     InitialTs :: genlib_time:ts() | undefined,
     Attempt :: non_neg_integer() | undefined.
@@ -1112,7 +1102,7 @@ extract_timer_queue_info({retrying, Timestamp, _, _, _}) ->
 extract_timer_queue_info(_Other) ->
     {error, not_timer}.
 
--spec emit_machine_load_beat(start_options(), mg_core:ns(), mg_core:id(), request_context(), StorageMachine) -> ok when
+-spec emit_machine_load_beat(options(), mg_core:ns(), mg_core:id(), request_context(), StorageMachine) -> ok when
     StorageMachine :: storage_machine() | unknown | nonexistent.
 emit_machine_load_beat(Options, Namespace, ID, ReqCtx, nonexistent) ->
     ok = emit_beat(Options, #mg_core_machine_lifecycle_created{
@@ -1129,19 +1119,14 @@ emit_machine_load_beat(Options, Namespace, ID, ReqCtx, _StorageMachine) ->
 
 %%
 
--spec storage_options(start_options() | call_options()) ->
+-spec storage_options(options()) ->
     storage_options().
 storage_options(#{storage := Storage}) ->
     Storage.
 
--spec processor_start_options(start_options()) ->
-    processor_start_options().
-processor_start_options(#{processor := Processor}) ->
-    Processor.
-
--spec processor_call_options(call_options()) ->
-    processor_call_options().
-processor_call_options(#{processor := Processor}) ->
+-spec processor_options(options()) ->
+    processor_options().
+processor_options(#{processor := Processor}) ->
     Processor.
 
 -spec try_suicide(state(), request_context()) ->
@@ -1166,7 +1151,7 @@ try_suicide(#{}, _) ->
 %% retrying
 %%
 -spec do_with_retry(Options, ID, Fun, mg_core_retry:strategy(), request_context(), atom()) -> Result when
-    Options :: start_options(),
+    Options :: options(),
     ID :: mg_core:id(),
     Fun :: fun(() -> Result),
     Result :: any().
@@ -1196,7 +1181,7 @@ do_with_retry(Options = #{namespace := NS}, ID, Fun, RetryStrategy, ReqCtx, Beat
 %%
 %% logging
 %%
--spec emit_beat(start_options(), mg_core_pulse:beat()) -> ok.
+-spec emit_beat(options(), mg_core_pulse:beat()) -> ok.
 emit_beat(#{pulse := Handler}, Beat) ->
     ok = mg_core_pulse:handle_beat(Handler, Beat).
 

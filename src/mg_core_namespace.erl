@@ -19,16 +19,20 @@
 %%%
 -module(mg_core_namespace).
 
--export_type([start_options/0]).
--export_type([call_options/0]).
+-export_type([options_ref/0]).
+-export_type([options/0]).
 -export_type([storage_options/0]).
 -export_type([machine_options/0]).
 -export_type([schedulers_options/0]).
--export_type([workers_manager_start_options/0]).
--export_type([workers_manager_call_options/0]).
+-export_type([workers_manager_options/0]).
 
 -export([child_spec/2]).
 -export([start_link/1]).
+
+-export([make_options_ref/1]).
+-export([save_options/2]).
+-export([load_options/1]).
+-export([load_processor_options/1]).
 
 -export([start/5]).
 -export([simple_repair/4]).
@@ -48,25 +52,18 @@
 
 %% Types
 
--type start_options() :: #{
+-type options() :: #{
     namespace := mg_core:ns(),
     registry := mg_core_procreg:options(),
     pulse := mg_core_pulse:handler(),
     storage := storage_options(),
-    processor := mg_core_machine:processor_start_options(),
+    processor := mg_core_machine:processor_options(),
     machine => machine_options(),
     schedulers => schedulers_options(),
-    workers_manager => workers_manager_start_options()
+    workers_manager => workers_manager_options()
 }.
 
--type call_options() :: #{
-    namespace := mg_core:ns(),
-    registry := mg_core_procreg:options(),
-    processor := mg_core_machine:processor_call_options(),
-    pulse := mg_core_pulse:handler(),
-    storage := storage_options(),
-    workers_manager => workers_manager_call_options()
-}.
+-opaque options_ref() :: {atom(), mg_core:ns()}.
 
 %% Internal types
 
@@ -98,11 +95,8 @@
     task_share => mg_core_quota:share()
 }.
 -type schedulers_options() :: #{scheduler_type() => scheduler_options()}.
--type workers_manager_start_options() :: #{
+-type workers_manager_options() :: #{
     sidecar => mg_core_utils:mod_opts(),
-    message_queue_len_limit => mg_core_workers_manager:queue_limit()
-}.
--type workers_manager_call_options() :: #{
     message_queue_len_limit => mg_core_workers_manager:queue_limit(),
     shutdown => mg_core_workers_manager:shutdown()
 }.
@@ -120,7 +114,7 @@
 
 %% API
 
--spec child_spec(start_options(), term()) ->
+-spec child_spec(options_ref(), term()) ->
     supervisor:child_spec().
 child_spec(Options, ChildID) ->
     #{
@@ -130,9 +124,10 @@ child_spec(Options, ChildID) ->
         type     => supervisor
     }.
 
--spec start_link(start_options()) ->
+-spec start_link(options_ref()) ->
     mg_core_utils:gen_start_ret().
-start_link(Options) ->
+start_link(OptionsRef) ->
+    Options = load_options(OptionsRef),
     mg_core_utils_supervisor_wrapper:start_link(
         #{strategy => one_for_one},
         [
@@ -142,83 +137,113 @@ start_link(Options) ->
         ]
     ).
 
+-spec make_options_ref(mg_core:ns()) ->
+    options_ref().
+make_options_ref(NS) ->
+    {?MODULE, NS}.
+
+-spec save_options(options(), options_ref()) ->
+    ok | {error, {exists, options()}}.
+save_options(Options, Ref) ->
+    case persistent_term:get(Ref, undefined) of
+        undefined ->
+            % Races are possible in this place.
+            % However, I assume that this code will be called on
+            % the application initialization, so no one would
+            % think of calling it concurrently.
+            persistent_term:put(Ref, Options);
+        Other ->
+            {error, {exists, Other}}
+    end.
+
+-spec load_options(options_ref()) ->
+    options().
+load_options(Ref) ->
+    persistent_term:get(Ref).
+
+-spec load_processor_options(options_ref()) ->
+    mg_core_machine:processor_options().
+load_processor_options(OptionsRef) ->
+    Options = load_options(OptionsRef),
+    maps:get(processor, Options).
+
 %% Machine API
 
--spec start(call_options(), mg_core:id(), term(), req_ctx(), deadline()) ->
+-spec start(options_ref(), mg_core:id(), term(), req_ctx(), deadline()) ->
     _Resp | no_return().
-start(Options, ID, Args, ReqCtx, Deadline) ->
-    call_(Options, ID, {start, Args}, ReqCtx, Deadline).
+start(OptionsRef, ID, Args, ReqCtx, Deadline) ->
+    call_(OptionsRef, ID, {start, Args}, ReqCtx, Deadline).
 
--spec simple_repair(call_options(), mg_core:id(), req_ctx(), deadline()) ->
+-spec simple_repair(options_ref(), mg_core:id(), req_ctx(), deadline()) ->
     _Resp | no_return().
-simple_repair(Options, ID, ReqCtx, Deadline) ->
-    call_(Options, ID, simple_repair, ReqCtx, Deadline).
+simple_repair(OptionsRef, ID, ReqCtx, Deadline) ->
+    call_(OptionsRef, ID, simple_repair, ReqCtx, Deadline).
 
--spec repair(call_options(), mg_core:id(), term(), req_ctx(), deadline()) ->
+-spec repair(options_ref(), mg_core:id(), term(), req_ctx(), deadline()) ->
     _Resp | no_return().
-repair(Options, ID, Args, ReqCtx, Deadline) ->
-    call_(Options, ID, {repair, Args}, ReqCtx, Deadline).
+repair(OptionsRef, ID, Args, ReqCtx, Deadline) ->
+    call_(OptionsRef, ID, {repair, Args}, ReqCtx, Deadline).
 
--spec call(call_options(), mg_core:id(), term(), req_ctx(), deadline()) ->
+-spec call(options_ref(), mg_core:id(), term(), req_ctx(), deadline()) ->
     _Resp | no_return().
-call(Options, ID, Call, ReqCtx, Deadline) ->
-    call_(Options, ID, {call, Call}, ReqCtx, Deadline).
+call(OptionsRef, ID, Call, ReqCtx, Deadline) ->
+    call_(OptionsRef, ID, {call, Call}, ReqCtx, Deadline).
 
--spec send_timeout(call_options(), mg_core:id(), genlib_time:ts(), deadline()) ->
+-spec send_timeout(options_ref(), mg_core:id(), genlib_time:ts(), deadline()) ->
     _Resp | no_return().
-send_timeout(Options, ID, Timestamp, Deadline) ->
-    call_(Options, ID, {timeout, Timestamp}, undefined, Deadline).
+send_timeout(OptionsRef, ID, Timestamp, Deadline) ->
+    call_(OptionsRef, ID, {timeout, Timestamp}, undefined, Deadline).
 
--spec resume_interrupted(call_options(), mg_core:id(), deadline()) ->
+-spec resume_interrupted(options_ref(), mg_core:id(), deadline()) ->
     _Resp | no_return().
-resume_interrupted(Options, ID, Deadline) ->
-    call_(Options, ID, resume_interrupted_one, undefined, Deadline).
+resume_interrupted(OptionsRef, ID, Deadline) ->
+    call_(OptionsRef, ID, resume_interrupted_one, undefined, Deadline).
 
--spec fail(call_options(), mg_core:id(), req_ctx(), deadline()) ->
+-spec fail(options_ref(), mg_core:id(), req_ctx(), deadline()) ->
     ok.
-fail(Options, ID, ReqCtx, Deadline) ->
-    fail(Options, ID, {error, explicit_fail, []}, ReqCtx, Deadline).
+fail(OptionsRef, ID, ReqCtx, Deadline) ->
+    fail(OptionsRef, ID, {error, explicit_fail, []}, ReqCtx, Deadline).
 
--spec fail(call_options(), mg_core:id(), mg_core_utils:exception(), req_ctx(), deadline()) ->
+-spec fail(options_ref(), mg_core:id(), mg_core_utils:exception(), req_ctx(), deadline()) ->
     ok.
-fail(Options, ID, Exception, ReqCtx, Deadline) ->
-    call_(Options, ID, {fail, Exception}, ReqCtx, Deadline).
+fail(OptionsRef, ID, Exception, ReqCtx, Deadline) ->
+    call_(OptionsRef, ID, {fail, Exception}, ReqCtx, Deadline).
 
--spec get_machine(call_options(), mg_core:id(), mg_core_machine:get_machine_args()) ->
+-spec get_machine(options_ref(), mg_core:id(), mg_core_machine:get_machine_args()) ->
     mg_core_machine:processor_machine_state() | no_return().
-get_machine(Options, ID, Args) ->
-    mg_core_machine:get_machine(machine_call_options(Options), ID, Args).
+get_machine(OptionsRef, ID, Args) ->
+    mg_core_machine:get_machine(load_machine_options(OptionsRef), ID, Args).
 
--spec get_status(call_options(), mg_core:id()) ->
+-spec get_status(options_ref(), mg_core:id()) ->
     mg_core_machine:machine_status() | no_return().
-get_status(Options, ID) ->
-    mg_core_machine:get_status(machine_call_options(Options), ID).
+get_status(OptionsRef, ID) ->
+    mg_core_machine:get_status(load_machine_options(OptionsRef), ID).
 
--spec is_exist(call_options(), mg_core:id()) ->
+-spec is_exist(options_ref(), mg_core:id()) ->
     boolean() | no_return().
-is_exist(Options, ID) ->
-    mg_core_machine:is_exist(machine_call_options(Options), ID).
+is_exist(OptionsRef, ID) ->
+    mg_core_machine:is_exist(load_machine_options(OptionsRef), ID).
 
--spec search(Options, Query, Limit, Continuation) -> Result when
-    Options :: call_options(),
+-spec search(OptionsRef, Query, Limit, Continuation) -> Result when
+    OptionsRef :: options_ref(),
     Query :: mg_core_machine:search_query(),
     Limit :: mg_core_storage:index_limit(),
     Continuation :: mg_core_storage:continuation(),
     Result :: mg_core_storage:search_result() | no_return().
-search(Options, Query, Limit, Continuation) ->
-    mg_core_machine:search(machine_call_options(Options), Query, Limit, Continuation).
+search(OptionsRef, Query, Limit, Continuation) ->
+    mg_core_machine:search(load_machine_options(OptionsRef), Query, Limit, Continuation).
 
--spec search(call_options(), mg_core_machine:search_query(), mg_core_storage:index_limit()) ->
+-spec search(options_ref(), mg_core_machine:search_query(), mg_core_storage:index_limit()) ->
     mg_core_storage:search_result() | no_return().
-search(Options, Query, Limit) ->
-    mg_core_machine:search(machine_call_options(Options), Query, Limit).
+search(OptionsRef, Query, Limit) ->
+    mg_core_machine:search(load_machine_options(OptionsRef), Query, Limit).
 
--spec search(call_options(), mg_core_machine:search_query()) ->
+-spec search(options_ref(), mg_core_machine:search_query()) ->
     mg_core_storage:search_result() | no_return().
-search(Options, Query) ->
-    mg_core_machine:search(machine_call_options(Options), Query).
+search(OptionsRef, Query) ->
+    mg_core_machine:search(load_machine_options(OptionsRef), Query).
 
--spec call_with_lazy_start(call_options(), mg_core:id(), term(), req_ctx(), deadline(), term()) ->
+-spec call_with_lazy_start(options_ref(), mg_core:id(), term(), req_ctx(), deadline(), term()) ->
     _Resp | no_return().
 call_with_lazy_start(Options, ID, Call, ReqCtx, Deadline, StartArgs) ->
     try
@@ -237,14 +262,26 @@ call_with_lazy_start(Options, ID, Call, ReqCtx, Deadline, StartArgs) ->
 
 %% Internals
 
--spec call_(call_options(), id(), call(), maybe(req_ctx()), deadline()) ->
+-spec load_machine_options(options_ref()) ->
+    mg_core_machine:options().
+load_machine_options(OptionsRef) ->
+    Options = load_options(OptionsRef),
+    machine_options(Options).
+
+-spec load_manager_options(options_ref()) ->
+    mg_core_workers_manager:options().
+load_manager_options(OptionsRef) ->
+    Options = load_options(OptionsRef),
+    manager_options(Options).
+
+-spec call_(options_ref(), id(), call(), maybe(req_ctx()), deadline()) ->
     _Reply | {error, _}.
-call_(Options, ID, Call, ReqCtx, Deadline) ->
+call_(OptionsRef, ID, Call, ReqCtx, Deadline) ->
     mg_core_utils:throw_if_error(
-        mg_core_workers_manager:call(manager_call_options(Options), ID, Call, ReqCtx, Deadline)
+        mg_core_workers_manager:call(load_manager_options(OptionsRef), ID, Call, ReqCtx, Deadline)
     ).
 
--spec machine_sup_child_spec(start_options(), term()) ->
+-spec machine_sup_child_spec(options(), term()) ->
     supervisor:child_spec().
 machine_sup_child_spec(Options, ChildID) ->
     #{
@@ -252,15 +289,15 @@ machine_sup_child_spec(Options, ChildID) ->
         start    => {mg_core_utils_supervisor_wrapper, start_link, [
             #{strategy => rest_for_one},
             mg_core_utils:lists_compact([
-                mg_core_machine:processor_child_spec(machine_start_options(Options), machine),
-                mg_core_workers_manager:child_spec(manager_start_options(Options), manager)
+                mg_core_machine:processor_child_spec(machine_options(Options), machine),
+                mg_core_workers_manager:child_spec(manager_options(Options), manager)
             ])
         ]},
         restart  => permanent,
         type     => supervisor
     }.
 
--spec scheduler_sup_child_spec(start_options(), term()) ->
+-spec scheduler_sup_child_spec(options(), term()) ->
     supervisor:child_spec().
 scheduler_sup_child_spec(Options, ChildID) ->
     #{
@@ -282,7 +319,7 @@ scheduler_sup_child_spec(Options, ChildID) ->
     }.
 
 
--spec scheduler_child_spec(scheduler_type(), start_options()) ->
+-spec scheduler_child_spec(scheduler_type(), options()) ->
     supervisor:child_spec() | undefined.
 scheduler_child_spec(SchedulerType, Options) ->
     case scheduler_options(SchedulerType, Options) of
@@ -294,17 +331,17 @@ scheduler_child_spec(SchedulerType, Options) ->
             mg_core_scheduler_sup:child_spec(SchedulerID, SchedulerOptions, SchedulerType)
     end.
 
--spec scheduler_options(scheduler_type(), start_options()) ->
+-spec scheduler_options(scheduler_type(), options()) ->
     scheduler_options().
 scheduler_options(SchedulerType, Options) ->
     maps:get(SchedulerType, maps:get(schedulers, Options, #{}), disable).
 
--spec scheduler_id(scheduler_type(), start_options()) ->
+-spec scheduler_id(scheduler_type(), options()) ->
     mg_core_scheduler:id() | undefined.
 scheduler_id(SchedulerType, #{namespace := NS}) ->
     {SchedulerType, NS}.
 
--spec scheduler_sup_options(scheduler_type(), start_options(), scheduler_options()) ->
+-spec scheduler_sup_options(scheduler_type(), options(), scheduler_options()) ->
     mg_core_scheduler_sup:options().
 scheduler_sup_options(SchedulerType, Options, Config) when
     SchedulerType == timers;
@@ -329,16 +366,17 @@ scheduler_sup_options(overseer, Options, Config) ->
     },
     scheduler_sup_options(mg_core_queue_interrupted, Options, HandlerOptions, Config).
 
--spec scheduler_sup_options(module(), start_options(), map(), scheduler_options()) ->
+-spec scheduler_sup_options(module(), options(), map(), scheduler_options()) ->
     mg_core_scheduler_sup:options().
 scheduler_sup_options(HandlerMod, Options, HandlerOptions, Config) ->
     #{
+        namespace := NS,
         pulse := Pulse
     } = Options,
     FullHandlerOptions = genlib_map:compact(maps:merge(
         #{
             pulse => Pulse,
-            namespace_options => Options
+            namespace_options_ref => make_options_ref(NS)
         },
         HandlerOptions
     )),
@@ -365,15 +403,15 @@ scheduler_cutoff(disable) ->
 scheduler_cutoff(#{}) ->
     undefined.
 
--spec storage_options(start_options() | call_options()) ->
+-spec storage_options(options()) ->
     mg_core_storage:options().
 storage_options(#{namespace := NS, storage := Storage, pulse := Pulse}) ->
     {Mod, Options} = mg_core_utils:separate_mod_opts(Storage, #{}),
     {Mod, Options#{name => {NS, ?MODULE, machines}, pulse => Pulse}}.
 
--spec manager_start_options(start_options()) ->
-    mg_core_workers_manager:start_options().
-manager_start_options(Options) ->
+-spec manager_options(options()) ->
+    mg_core_workers_manager:options().
+manager_options(Options) ->
     #{
         pulse := Pulse,
         registry := Registry,
@@ -382,30 +420,14 @@ manager_start_options(Options) ->
     ManagerOptions = maps:get(workers_manager, Options, #{}),
     ManagerOptions#{
         pulse => Pulse,
-        worker => {mg_core_machine, machine_start_options(Options)},
+        worker => {mg_core_machine, machine_options(Options)},
         registry => Registry,
         namespace => NS
     }.
 
--spec manager_call_options(call_options()) ->
-    mg_core_workers_manager:call_options().
-manager_call_options(Options) ->
-    #{
-        pulse := Pulse,
-        registry := Registry,
-        namespace := NS
-    } = Options,
-    ManagerOptions = maps:get(workers_manager, Options, #{}),
-    ManagerOptions#{
-        pulse => Pulse,
-        worker => {mg_core_machine, machine_call_options(Options)},
-        registry => Registry,
-        namespace => NS
-    }.
-
--spec machine_start_options(start_options()) ->
-    mg_core_machine:start_options().
-machine_start_options(Options) ->
+-spec machine_options(options()) ->
+    mg_core_machine:options().
+machine_options(Options) ->
     #{
         namespace := NS,
         processor := Processor,
@@ -420,28 +442,13 @@ machine_start_options(Options) ->
         schedulers => machine_schedulers_opt(Options)
     }.
 
--spec machine_call_options(call_options()) ->
-    mg_core_machine:call_options().
-machine_call_options(Options) ->
-    #{
-        namespace := NS,
-        processor := Processor,
-        pulse := Pulse
-    } = Options,
-    #{
-        namespace => NS,
-        processor => Processor,
-        pulse => Pulse,
-        storage => storage_options(Options)
-    }.
-
--spec machine_schedulers_opt(start_options()) ->
+-spec machine_schedulers_opt(options()) ->
     mg_core_machine:schedulers_opt().
 machine_schedulers_opt(Options) ->
     Types = [timers, timers_retries],
     maps:from_list([{T, machine_scheduler_opt(T, Options)} || T <- Types]).
 
--spec machine_scheduler_opt(scheduler_type(), start_options()) ->
+-spec machine_scheduler_opt(scheduler_type(), options()) ->
     mg_core_machine:scheduler_opt().
 machine_scheduler_opt(SchedulerType, Options) ->
     SchedulerOptions = scheduler_options(SchedulerType, Options),

@@ -17,11 +17,13 @@
 -module(mg_core_machine_tags).
 
 %% API
--export_type([start_options/0]).
--export_type([call_options/0]).
+-export_type([options/0]).
+-export_type([namespace_options/0]).
 -export_type([tag/0]).
 
 -export([child_spec/2]).
+-export([make_namespace_options/1]).
+
 -export([add/5]).
 -export([replace/6]).
 -export([resolve/2]).
@@ -32,23 +34,19 @@
 -export([get_machine/4]).
 -export([process_machine/7]).
 
--type start_options() :: #{
+-type namespace_options() :: #{
     namespace := mg_core:ns(),
     registry := mg_core_procreg:options(),
     pulse := mg_core_pulse:handler(),
     storage := mg_core_namespace:storage_options(),
-    target := mg_core_namespace:call_options(),
+    target := mg_core_namespace:options_ref(),
     machine => mg_core_namespace:machine_options(),
-    workers_manager => mg_core_namespace:workers_manager_start_options()
+    workers_manager => mg_core_namespace:workers_manager_options()
 }.
 
--type call_options() :: #{
-    namespace := mg_core:ns(),
-    registry := mg_core_procreg:options(),
-    pulse := mg_core_pulse:handler(),
-    storage := mg_core_namespace:storage_options(),
-    target := mg_core_namespace:call_options(),
-    workers_manager => mg_core_namespace:workers_manager_call_options()
+-type options() :: #{
+    namespace_options_ref := mg_core_namespace:options_ref(),
+    target := mg_core_namespace:options_ref()
 }.
 
 -type tag() :: binary().
@@ -58,26 +56,32 @@
 -type deadline() :: mg_core_deadline:deadline().
 -type req_ctx() :: mg_core:request_context().
 
--type processor_start_options() :: #{
-    target := mg_core_namespace:start_options()
-}.
-
--type processor_call_options() :: #{
-    target := mg_core_namespace:call_options()
+-type processor_options() :: #{
+    target := mg_core_namespace:options_ref()
 }.
 
 %% API
 
--spec child_spec(start_options(), term()) ->
+-spec child_spec(options(), term()) ->
     supervisor:child_spec().
 child_spec(Options, ChildID) ->
-    mg_core_namespace:child_spec(namespace_options(Options), ChildID).
+    mg_core_namespace:child_spec(namespace_options_ref(Options), ChildID).
 
--spec add(call_options(), tag(), mg_core:id(), req_ctx(), deadline()) ->
+-spec make_namespace_options(namespace_options()) ->
+    mg_core_namespace:options().
+make_namespace_options(Options) ->
+    NSOptions = maps:with([namespace, registry, pulse, storage, worker, machine, workers_manager], Options),
+    NSOptions#{
+        processor => {?MODULE, #{
+            target => maps:get(target, Options)
+        }}
+    }.
+
+-spec add(options(), tag(), mg_core:id(), req_ctx(), deadline()) ->
     ok | {already_exists, mg_core:id()} | no_return().
 add(Options, Tag, ID, ReqCtx, Deadline) ->
     mg_core_namespace:call_with_lazy_start(
-        namespace_options(Options),
+        namespace_options_ref(Options),
         Tag,
         {add, ID},
         ReqCtx,
@@ -85,11 +89,11 @@ add(Options, Tag, ID, ReqCtx, Deadline) ->
         undefined
     ).
 
--spec replace(call_options(), tag(), mg_core:id(), mg_core:id(), req_ctx(), deadline()) ->
+-spec replace(options(), tag(), mg_core:id(), mg_core:id(), req_ctx(), deadline()) ->
     ok | no_return().
 replace(Options, Tag, OldMachineID, NewMachineID, ReqCtx, Deadline) ->
     mg_core_namespace:call_with_lazy_start(
-        namespace_options(Options),
+        namespace_options_ref(Options),
         Tag,
         {replace, OldMachineID, NewMachineID},
         ReqCtx,
@@ -97,16 +101,16 @@ replace(Options, Tag, OldMachineID, NewMachineID, ReqCtx, Deadline) ->
         undefined
     ).
 
--spec is_target_exist(call_options(), mg_core:id()) ->
+-spec is_target_exist(options(), mg_core:id()) ->
     boolean().
 is_target_exist(Options, ID) ->
-    mg_core_namespace:is_exist(target_options(Options), ID).
+    mg_core_namespace:is_exist(target_options_ref(Options), ID).
 
--spec resolve(call_options(), tag()) ->
+-spec resolve(options(), tag()) ->
     mg_core:id() | undefined | no_return().
 resolve(Options, Tag) ->
     try
-        mg_core_namespace:get_machine(namespace_options(Options), Tag, undefined)
+        mg_core_namespace:get_machine(namespace_options_ref(Options), Tag, undefined)
     catch throw:{logic, machine_not_found} ->
         undefined
     end.
@@ -117,7 +121,7 @@ resolve(Options, Tag) ->
 -type state() :: mg_core:id() | undefined.
 
 -spec get_machine(Options, ID, Args, PackedState) -> Result when
-    Options :: processor_call_options(),
+    Options :: processor_options(),
     ID :: mg_core:id(),
     Args :: undefined,
     PackedState :: mg_core_machine:machine_state(),
@@ -126,7 +130,7 @@ get_machine(_Options, _ID, undefined, State) ->
     opaque_to_state(State).
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
-    Options :: processor_start_options(),
+    Options :: processor_options(),
     ID :: mg_core:id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
@@ -165,19 +169,14 @@ handle_call({replace, OldMachineID, NewMachineID}, State) ->
             {{invalid_old_id, OtherID}, State}
     end.
 
--spec namespace_options(start_options() | call_options()) ->
-    mg_core_namespace:start_options() | mg_core_namespace:call_options().
-namespace_options(Options) ->
-    NSOptions = maps:with([namespace, registry, pulse, storage, worker, machine, workers_manager], Options),
-    NSOptions#{
-        processor => {?MODULE, #{
-            target => maps:get(target, Options)
-        }}
-    }.
+-spec namespace_options_ref(options()) ->
+    mg_core_namespace:options_ref().
+namespace_options_ref(Options) ->
+    maps:get(namespace_options_ref, Options).
 
--spec target_options(start_options() | call_options()) ->
-    mg_core_namespace:start_options() | mg_core_namespace:call_options().
-target_options(Options) ->
+-spec target_options_ref(options()) ->
+    mg_core_namespace:options_ref().
+target_options_ref(Options) ->
     maps:get(target, Options).
 
 %%

@@ -73,19 +73,18 @@ end_per_suite(C) ->
 -spec full_test(config()) ->
     _.
 full_test(_) ->
-    Options = automaton_options(),
-    AutomatonPid = start_automaton(Options),
+    {AutomatonPid, OptionsRef} = start_automaton(namespace_options()),
     % TODO убрать константы
     Pids =
         lists:map(
             fun(ID) ->
-                erlang:spawn_link(fun() -> check_chain(Options, ID), timer:sleep(100) end)
+                erlang:spawn_link(fun() -> check_chain(OptionsRef, ID), timer:sleep(100) end)
             end,
             lists:seq(1, 10)
         ),
     ok = timer:sleep(5 * 1000),
     ok = mg_core_ct_helper:stop_wait_all(Pids, shutdown, 5000),
-    ok = stop_automaton(AutomatonPid).
+    ok = stop_automaton(OptionsRef, AutomatonPid).
 
 %% TODO wait, simple_repair, kill, continuation
 -type id() :: pos_integer().
@@ -217,20 +216,23 @@ map_flow_action(fail  , _  ) -> exit(fail).
 %%
 %% utils
 %%
--spec start_automaton(mg_core_namespace:start_options()) ->
-    pid().
+-spec start_automaton(mg_core_namespace:options()) ->
+    {pid(), mg_core_namespace:options_ref()}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_namespace:start_link(Options)).
+    OptionsRef = mg_core_namespace:make_options_ref(maps:get(namespace, Options)),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_namespace:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRef, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
     ok.
 
--spec automaton_options() ->
-    mg_core_namespace:start_options().
-automaton_options() ->
+-spec namespace_options() ->
+    mg_core_namespace:options().
+namespace_options() ->
     #{
         namespace => <<"test">>,
         processor => ?MODULE,

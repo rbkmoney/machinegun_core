@@ -66,15 +66,16 @@ init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_events_sink_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
-    Pid = start_event_sink(event_sink_options()),
+    {Pid, OptionsRef} = start_event_sink(),
     true = erlang:unlink(Pid),
     {Events, _} = mg_core_events:generate_events_with_range([{#{}, Body} || Body <- [1, 2, 3]], undefined),
-    [{apps, Apps}, {pid, Pid}, {events, Events}| C].
+    [{apps, Apps}, {pid, Pid}, {options_ref, OptionsRef}, {events, Events}| C].
 
 -spec end_per_suite(config()) ->
     ok.
 end_per_suite(C) ->
     ok = proc_lib:stop(?config(pid, C)),
+    _ = persistent_term:erase(?config(options_ref, C)),
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
 
@@ -128,20 +129,31 @@ get_history(_C) ->
     EventsSinkEvents = mg_core_events_sink_machine:get_history(event_sink_options(), HRange),
     [{ID, Body} || #{id := ID, body := Body} <- EventsSinkEvents].
 
--spec start_event_sink(mg_core_events_sink_machine:ns_options()) ->
-    pid().
-start_event_sink(Options) ->
-    mg_core_utils:throw_if_error(
+-spec start_event_sink() ->
+    {pid(), mg_core_namespace:options_ref()}.
+start_event_sink() ->
+    OptionsRef = save_sink_namespace_options(),
+    Pid = mg_core_utils:throw_if_error(
         mg_core_utils_supervisor_wrapper:start_link(
             #{strategy => one_for_all},
-            [mg_core_events_sink_machine:child_spec(Options, event_sink)]
+            [mg_core_events_sink_machine:child_spec(event_sink_options(), event_sink)]
         )
-    ).
+    ),
+    {Pid, OptionsRef}.
 
 -spec event_sink_options() ->
-    mg_core_events_sink_machine:start_options().
+    mg_core_events_sink_machine:options().
 event_sink_options() ->
     #{
+        name                   => machine,
+        machine_id             => ?ES_ID,
+        namespace_options_ref  => mg_core_namespace:make_options_ref(?ES_ID)
+    }.
+
+-spec save_sink_namespace_options() ->
+    mg_core_namespace:options_ref().
+save_sink_namespace_options() ->
+    Options = mg_core_events_sink_machine:make_namespace_options(#{
         name                   => machine,
         machine_id             => ?ES_ID,
         namespace              => ?ES_ID,
@@ -149,7 +161,10 @@ event_sink_options() ->
         registry               => mg_core_procreg_gproc,
         pulse                  => ?MODULE,
         events_storage         => mg_core_storage_memory
-    }.
+    }),
+    OptionsRef = mg_core_namespace:make_options_ref(?ES_ID),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    OptionsRef.
 
 -spec handle_beat(_, mg_core_pulse:beat()) ->
     ok.
