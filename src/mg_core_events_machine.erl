@@ -373,7 +373,7 @@ add_tag(Options, ID, ReqCtx, Deadline, Tag) ->
         ok ->
             ok;
         {already_exists, OtherMachineID} ->
-            case mg_core_machine_tags:is_target_exist(tags_options(Options), OtherMachineID) of
+            case mg_core_namespace:is_exist(own_namespace_options_ref(Options), OtherMachineID) of
                 true ->
                     % была договорённость, что при двойном тэгировании роняем машину
                     exit({double_tagging, OtherMachineID});
@@ -564,6 +564,10 @@ tags_options(#{tagging := Options}) ->
 namespace_processor_options(NSOptionsRef) ->
     {?MODULE, Options} = mg_core_namespace:load_processor_options(NSOptionsRef),
     Options.
+
+-spec own_namespace_options_ref(options()) -> namespace_options_ref().
+own_namespace_options_ref(#{namespace := Namespace}) ->
+    mg_core_namespace:make_options_ref(Namespace).
 
 %%
 

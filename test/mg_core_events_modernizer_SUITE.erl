@@ -201,8 +201,7 @@ save_namespace_options(ProcessorOptions, NS) ->
         namespace => <<NS/binary, "_tags">>,
         storage => Storage,
         registry => mg_core_procreg_gproc,
-        pulse => Pulse,
-        target => mg_core_namespace:make_options_ref(NS)
+        pulse => Pulse
     }),
     OptionsRef = mg_core_namespace:make_options_ref(NS),
     NSOptions = #{
@@ -213,8 +212,7 @@ save_namespace_options(ProcessorOptions, NS) ->
             pulse => Pulse,
             events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_events">>, Storage),
             tagging => #{
-                namespace_options_ref => TagsRef,
-                target => OptionsRef
+                namespace_options_ref => TagsRef
             },
             event_sinks => [],
             event_stash_size => EventStashSize

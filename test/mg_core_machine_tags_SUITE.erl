@@ -151,8 +151,7 @@ start_automaton() ->
     mg_core_machine_tags:options().
 tag_options() ->
     #{
-        namespace_options_ref => mg_core_namespace:make_options_ref(<<"test_tags">>),
-        target => mg_core_namespace:make_options_ref(<<"test">>)
+        namespace_options_ref => mg_core_namespace:make_options_ref(<<"test_tags">>)
     }.
 
 -spec save_tag_namespace_options() ->
@@ -163,8 +162,7 @@ save_tag_namespace_options() ->
         namespace => <<"test_tags">>,
         storage   => mg_core_storage_memory,
         registry  => mg_core_procreg_gproc,
-        pulse     => ?MODULE,
-        target    => #{}
+        pulse     => ?MODULE
     }),
     OptionsRef = mg_core_namespace:make_options_ref(NS),
     ok = mg_core_namespace:save_options(Options, OptionsRef),

@@ -27,7 +27,6 @@
 -export([add/5]).
 -export([replace/6]).
 -export([resolve/2]).
--export([is_target_exist/2]).
 
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
@@ -39,14 +38,12 @@
     registry := mg_core_procreg:options(),
     pulse := mg_core_pulse:handler(),
     storage := mg_core_namespace:storage_options(),
-    target := mg_core_namespace:options_ref(),
     machine => mg_core_namespace:machine_options(),
     workers_manager => mg_core_namespace:workers_manager_options()
 }.
 
 -type options() :: #{
-    namespace_options_ref := mg_core_namespace:options_ref(),
-    target := mg_core_namespace:options_ref()
+    namespace_options_ref := mg_core_namespace:options_ref()
 }.
 
 -type tag() :: binary().
@@ -56,9 +53,7 @@
 -type deadline() :: mg_core_deadline:deadline().
 -type req_ctx() :: mg_core:request_context().
 
--type processor_options() :: #{
-    target := mg_core_namespace:options_ref()
-}.
+-type processor_options() :: #{}.
 
 %% API
 
@@ -72,9 +67,7 @@ child_spec(Options, ChildID) ->
 make_namespace_options(Options) ->
     NSOptions = maps:with([namespace, registry, pulse, storage, worker, machine, workers_manager], Options),
     NSOptions#{
-        processor => {?MODULE, #{
-            target => maps:get(target, Options)
-        }}
+        processor => {?MODULE, #{}}
     }.
 
 -spec add(options(), tag(), mg_core:id(), req_ctx(), deadline()) ->
@@ -100,11 +93,6 @@ replace(Options, Tag, OldMachineID, NewMachineID, ReqCtx, Deadline) ->
         Deadline,
         undefined
     ).
-
--spec is_target_exist(options(), mg_core:id()) ->
-    boolean().
-is_target_exist(Options, ID) ->
-    mg_core_namespace:is_exist(target_options_ref(Options), ID).
 
 -spec resolve(options(), tag()) ->
     mg_core:id() | undefined | no_return().
@@ -173,11 +161,6 @@ handle_call({replace, OldMachineID, NewMachineID}, State) ->
     mg_core_namespace:options_ref().
 namespace_options_ref(Options) ->
     maps:get(namespace_options_ref, Options).
-
--spec target_options_ref(options()) ->
-    mg_core_namespace:options_ref().
-target_options_ref(Options) ->
-    maps:get(target, Options).
 
 %%
 %% packer to opaque
