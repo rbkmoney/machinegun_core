@@ -18,45 +18,87 @@
 
 %% API
 -export_type([options/0]).
--export_type([tag    /0]).
+-export_type([namespace_options/0]).
+-export_type([tag/0]).
+
 -export([child_spec/2]).
--export([add       /5]).
--export([replace   /5]).
--export([resolve   /2]).
+-export([make_namespace_options/1]).
+
+-export([add/5]).
+-export([replace/6]).
+-export([resolve/2]).
 
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
+-export([get_machine/4]).
 -export([process_machine/7]).
 
--type options() :: #{
-    namespace => mg_core:ns(),
-    worker    => mg_core_workers_manager:options(),
-    storage   => mg_core_machine:storage_options(),
-    pulse     => mg_core_pulse:handler(),
-    retries   => mg_core_machine:retry_opt()
+-type namespace_options() :: #{
+    namespace := mg_core:ns(),
+    registry := mg_core_procreg:options(),
+    pulse := mg_core_pulse:handler(),
+    storage := mg_core_namespace:storage_options(),
+    machine => mg_core_namespace:machine_options(),
+    workers_manager => mg_core_namespace:workers_manager_options()
 }.
+
+-type options() :: #{
+    namespace_options_ref := mg_core_namespace:options_ref()
+}.
+
 -type tag() :: binary().
 
--spec child_spec(options(), atom()) ->
+%% Internal types
+
+-type deadline() :: mg_core_deadline:deadline().
+-type req_ctx() :: mg_core:request_context().
+
+-type processor_options() :: #{}.
+
+%% API
+
+-spec child_spec(options(), term()) ->
     supervisor:child_spec().
 child_spec(Options, ChildID) ->
-    mg_core_machine:child_spec(machine_options(Options), ChildID).
+    mg_core_namespace:child_spec(namespace_options_ref(Options), ChildID).
 
--spec add(options(), tag(), mg_core:id(), mg_core:request_context(), mg_core_deadline:deadline()) ->
+-spec make_namespace_options(namespace_options()) ->
+    mg_core_namespace:options().
+make_namespace_options(Options) ->
+    NSOptions = maps:with([namespace, registry, pulse, storage, worker, machine, workers_manager], Options),
+    NSOptions#{
+        processor => {?MODULE, #{}}
+    }.
+
+-spec add(options(), tag(), mg_core:id(), req_ctx(), deadline()) ->
     ok | {already_exists, mg_core:id()} | no_return().
 add(Options, Tag, ID, ReqCtx, Deadline) ->
-    mg_core_machine:call_with_lazy_start(machine_options(Options), Tag, {add, ID}, ReqCtx, Deadline, undefined).
+    mg_core_namespace:call_with_lazy_start(
+        namespace_options_ref(Options),
+        Tag,
+        {add, ID},
+        ReqCtx,
+        Deadline,
+        undefined
+    ).
 
--spec replace(options(), tag(), mg_core:id(), mg_core:request_context(), mg_core_deadline:deadline()) ->
+-spec replace(options(), tag(), mg_core:id(), mg_core:id(), req_ctx(), deadline()) ->
     ok | no_return().
-replace(Options, Tag, ID, ReqCtx, Deadline) ->
-    mg_core_machine:call_with_lazy_start(machine_options(Options), Tag, {replace, ID}, ReqCtx, Deadline, undefined).
+replace(Options, Tag, OldMachineID, NewMachineID, ReqCtx, Deadline) ->
+    mg_core_namespace:call_with_lazy_start(
+        namespace_options_ref(Options),
+        Tag,
+        {replace, OldMachineID, NewMachineID},
+        ReqCtx,
+        Deadline,
+        undefined
+    ).
 
 -spec resolve(options(), tag()) ->
     mg_core:id() | undefined | no_return().
 resolve(Options, Tag) ->
     try
-        opaque_to_state(mg_core_machine:get(machine_options(Options), Tag))
+        mg_core_namespace:get_machine(namespace_options_ref(Options), Tag, undefined)
     catch throw:{logic, machine_not_found} ->
         undefined
     end.
@@ -66,38 +108,59 @@ resolve(Options, Tag) ->
 %%
 -type state() :: mg_core:id() | undefined.
 
--spec process_machine(_, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
-    mg_core_machine:processor_result().
-process_machine(_, _, {init, undefined}, _, _, _, _) ->
+-spec get_machine(Options, ID, Args, PackedState) -> Result when
+    Options :: processor_options(),
+    ID :: mg_core:id(),
+    Args :: undefined,
+    PackedState :: mg_core_machine:machine_state(),
+    Result :: state().
+get_machine(_Options, _ID, undefined, State) ->
+    opaque_to_state(State).
+
+-spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
+    Options :: processor_options(),
+    ID :: mg_core:id(),
+    Impact :: mg_core_machine:processor_impact(),
+    PCtx :: mg_core_machine:processing_context(),
+    ReqCtx :: req_ctx(),
+    Deadline :: deadline(),
+    PackedState :: mg_core_machine:machine_state(),
+    Result :: mg_core_machine:processor_result().
+process_machine(_Options, _ID, {init, undefined}, _PCtx, _ReqCtx, _Deadline, _PackedState) ->
     {{reply, ok}, sleep, state_to_opaque(undefined)};
-process_machine(_, _, {repair, undefined}, _, _, _, State) ->
-    {{reply, ok}, sleep, State};
-process_machine(_, _, {call, {add, ID}}, _, _, _, PackedState) ->
-    case opaque_to_state(PackedState) of
-        undefined ->
-            {{reply, ok}, sleep, state_to_opaque(ID)};
-        ID ->
-            {{reply, ok}, sleep, PackedState};
-        OtherID ->
-            {{reply, {already_exists, OtherID}}, sleep, PackedState}
-    end;
-process_machine(_, _, {call, {replace, ID}}, _, _, _, _) ->
-    {{reply, ok}, sleep, state_to_opaque(ID)}.
+process_machine(_Options, _ID, {repair, undefined}, _PCtx, _ReqCtx, _Deadline, PackedState) ->
+    {{reply, ok}, sleep, PackedState};
+process_machine(_Options, _ID, {call, Call}, _PCtx, _ReqCtx, _Deadline, PackedState) ->
+    {Reply, NewState} = handle_call(Call, opaque_to_state(PackedState)),
+    {{reply, Reply}, sleep, state_to_opaque(NewState)}.
 
 %%
 %% local
 %%
--spec machine_options(options()) ->
-    mg_core_machine:options().
-machine_options(Opts = #{namespace:=Namespace, storage:=Storage, pulse := Pulse, retries := Retries}) ->
-    #{
-        namespace => Namespace,
-        processor => ?MODULE,
-        worker    => maps:get(worker, Opts, #{}),
-        storage   => Storage,
-        pulse     => Pulse,
-        retries   => Retries
-    }.
+
+-spec handle_call(Call :: term(), state()) ->
+    {Reply :: term(), state()}.
+handle_call({add, ID}, State) ->
+    case State of
+        undefined ->
+            {ok, ID};
+        ID ->
+            {ok, State};
+        OtherID ->
+            {{already_exists, OtherID}, State}
+    end;
+handle_call({replace, OldMachineID, NewMachineID}, State) ->
+    case State of
+        OldMachineID ->
+            {ok, NewMachineID};
+        OtherID ->
+            {{invalid_old_id, OtherID}, State}
+    end.
+
+-spec namespace_options_ref(options()) ->
+    mg_core_namespace:options_ref().
+namespace_options_ref(Options) ->
+    maps:get(namespace_options_ref, Options).
 
 %%
 %% packer to opaque

@@ -94,18 +94,18 @@ stash_enlarge_test(_C) ->
         namespace => <<"event_stash_test">>,
         event_stash_size => 3
     },
-    Pid0 = start_automaton(Options0),
-    ok = start(Options0, MachineID, [1, 2]),
-    ok = call(Options0, MachineID, {emit, [3, 4]}),
-    ?assertEqual([1, 2, 3, 4], get_history(Options0, MachineID)),
-    ?assertEqual([4, 3, 2, 1], get_history(Options0, MachineID, {undefined, undefined, backward})),
-    ok = stop_automaton(Pid0),
+    {Pid0, OptionsRef0, Refs0} = start_automaton(Options0),
+    ok = start(OptionsRef0, MachineID, [1, 2]),
+    ok = call(OptionsRef0, MachineID, {emit, [3, 4]}),
+    ?assertEqual([1, 2, 3, 4], get_history(OptionsRef0, MachineID)),
+    ?assertEqual([4, 3, 2, 1], get_history(OptionsRef0, MachineID, {undefined, undefined, backward})),
+    ok = stop_automaton(Refs0, Pid0),
     Options1 = Options0#{event_stash_size => 5},
-    Pid1 = start_automaton(Options1),
-    ok = call(Options1, MachineID, {emit, [5, 6]}),
-    ?assertEqual([1, 2, 3, 4, 5, 6], get_history(Options1, MachineID)),
-    ?assertEqual([6, 5, 4, 3, 2, 1], get_history(Options1, MachineID, {undefined, undefined, backward})),
-    ok = stop_automaton(Pid1).
+    {Pid1, OptionsRef1, Refs1} = start_automaton(Options1),
+    ok = call(OptionsRef1, MachineID, {emit, [5, 6]}),
+    ?assertEqual([1, 2, 3, 4, 5, 6], get_history(OptionsRef1, MachineID)),
+    ?assertEqual([6, 5, 4, 3, 2, 1], get_history(OptionsRef1, MachineID, {undefined, undefined, backward})),
+    ok = stop_automaton(Refs1, Pid1).
 
 -spec stash_shrink_test(config()) ->
     any().
@@ -123,18 +123,18 @@ stash_shrink_test(_C) ->
         namespace => <<"event_stash_test">>,
         event_stash_size => 5
     },
-    Pid0 = start_automaton(Options0),
-    ok = start(Options0, MachineID, [1, 2]),
-    ok = call(Options0, MachineID, {emit, [3, 4, 5]}),
-    ?assertEqual([1, 2, 3, 4, 5], get_history(Options0, MachineID)),
-    ?assertEqual([5, 4, 3, 2, 1], get_history(Options0, MachineID, {undefined, undefined, backward})),
-    ok = stop_automaton(Pid0),
+    {Pid0, OptionsRef0, Refs0} = start_automaton(Options0),
+    ok = start(OptionsRef0, MachineID, [1, 2]),
+    ok = call(OptionsRef0, MachineID, {emit, [3, 4, 5]}),
+    ?assertEqual([1, 2, 3, 4, 5], get_history(OptionsRef0, MachineID)),
+    ?assertEqual([5, 4, 3, 2, 1], get_history(OptionsRef0, MachineID, {undefined, undefined, backward})),
+    ok = stop_automaton(Refs0, Pid0),
     Options1 = Options0#{event_stash_size => 3},
-    Pid1 = start_automaton(Options1),
-    ok = call(Options1, MachineID, {emit, [6, 7]}),
-    ?assertEqual([1, 2, 3, 4, 5, 6, 7], get_history(Options1, MachineID)),
-    ?assertEqual([7, 6, 5, 4, 3, 2, 1], get_history(Options1, MachineID, {undefined, undefined, backward})),
-    ok = stop_automaton(Pid1).
+    {Pid1, OptionsRef1, Refs1} = start_automaton(Options1),
+    ok = call(OptionsRef1, MachineID, {emit, [6, 7]}),
+    ?assertEqual([1, 2, 3, 4, 5, 6, 7], get_history(OptionsRef1, MachineID)),
+    ?assertEqual([7, 6, 5, 4, 3, 2, 1], get_history(OptionsRef1, MachineID, {undefined, undefined, backward})),
+    ok = stop_automaton(Refs1, Pid1).
 
 %% Processor handlers
 
@@ -211,89 +211,89 @@ handle_beat(_, Beat) ->
 %% Internal functions
 
 -spec start_automaton(options()) ->
-    pid().
+    {pid(), mg_core_namespace:options_ref(), [mg_core_namespace:options_ref()]}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_events_machine:start_link(events_machine_options(Options))).
+    {OptionsRef, Refs} = save_namespace_options(Options),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef, Refs}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton([mg_core_namespace:options_ref()], pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRefs, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    [persistent_term:erase(Ref) || Ref <- OptionsRefs],
     ok.
 
--spec events_machine_options(options()) ->
-    mg_core_events_machine:options().
-events_machine_options(Options) ->
+-spec save_namespace_options(options()) ->
+    mg_core_namespace:options_ref().
+save_namespace_options(Options) ->
     NS = maps:get(namespace, Options),
-    Scheduler = #{registry => mg_core_procreg_gproc, interval => 100},
-    #{
+    Processor = maps:get(processor, Options),
+    StashSize = maps:get(event_stash_size, Options),
+    Scheduler = #{min_scan_delay => 100},
+    Storage = {mg_core_storage_memory, #{
+        existing_storage_name => ?MODULE
+    }},
+    TagsRef = mg_core_namespace:make_options_ref(<<NS/binary, "_tags">>),
+    TagsNSOptions = mg_core_machine_tags:make_namespace_options(#{
+        namespace => <<NS/binary, "_tags">>,
+        storage => mg_core_ct_helper:build_storage(NS, Storage),
+        registry => mg_core_procreg_gproc,
+        pulse => ?MODULE
+    }),
+    OptionsRef = mg_core_namespace:make_options_ref(NS),
+    NSOptions = #{
         namespace => NS,
-        processor => maps:get(processor, Options),
-        tagging => #{
-            namespace => <<NS/binary, "_tags">>,
-            storage => {mg_core_storage_memory, #{
-                existing_storage_name => ?MODULE
-            }},
-            worker => #{
-                registry => mg_core_procreg_gproc
-            },
-            pulse => ?MODULE,
-            retries => #{}
-        },
-        machines => #{
+        processor => {mg_core_events_machine, #{
             namespace => NS,
-            storage => {mg_core_storage_memory, #{
-                existing_storage_name => ?MODULE
-            }},
-            worker => #{
-                registry => mg_core_procreg_gproc
-            },
+            processor => Processor,
             pulse => ?MODULE,
-            schedulers => #{
-                timers         => Scheduler,
-                timers_retries => Scheduler,
-                overseer       => Scheduler
-            }
-        },
-        events_storage => {mg_core_storage_memory, #{
-            existing_storage_name => ?MODULE
+            events_storage => Storage,
+            tagging => #{
+                namespace_options_ref => TagsRef
+            },
+            event_sinks => [
+                {?MODULE, Options}
+            ],
+            event_stash_size => StashSize
         }},
-        event_sinks => [
-            {?MODULE, Options}
-        ],
+        storage => Storage,
+        registry => mg_core_procreg_gproc,
         pulse => ?MODULE,
-        default_processing_timeout => timer:seconds(10),
-        event_stash_size => maps:get(event_stash_size, Options)
-    }.
+        schedulers => #{
+            timers => Scheduler,
+            timers_retries => Scheduler,
+            overseer => Scheduler
+        }
+    },
+    ok = mg_core_namespace:save_options(NSOptions, OptionsRef),
+    ok = mg_core_namespace:save_options(TagsNSOptions, TagsRef),
+    {OptionsRef, [OptionsRef, TagsRef]}.
 
 %%
 
--spec start(options(), mg_core:id(), term()) ->
+-spec start(mg_core_namespace:options_ref(), mg_core:id(), term()) ->
     ok.
-start(Options, MachineID, Args) ->
+start(OptionsRef, MachineID, Args) ->
     Deadline = mg_core_deadline:from_timeout(3000),
-    MgOptions = events_machine_options(Options),
-    mg_core_events_machine:start(MgOptions, MachineID, encode(Args), <<>>, Deadline).
+    mg_core_events_machine:start(OptionsRef, MachineID, encode(Args), <<>>, Deadline).
 
--spec call(options(), mg_core:id(), term()) ->
+-spec call(mg_core_namespace:options_ref(), mg_core:id(), term()) ->
     term().
-call(Options, MachineID, Args) ->
+call(OptionsRef, MachineID, Args) ->
     HRange = {undefined, undefined, forward},
     Deadline = mg_core_deadline:from_timeout(3000),
-    MgOptions = events_machine_options(Options),
-    Result = mg_core_events_machine:call(MgOptions, {id, MachineID}, encode(Args), HRange, <<>>, Deadline),
+    Result = mg_core_events_machine:call(OptionsRef, {id, MachineID}, encode(Args), HRange, <<>>, Deadline),
     decode(Result).
 
--spec get_history(options(), mg_core:id()) ->
+-spec get_history(mg_core_namespace:options_ref(), mg_core:id()) ->
     ok.
-get_history(Options, MachineID) ->
-    get_history(Options, MachineID, {undefined, undefined, forward}).
+get_history(OptionsRef, MachineID) ->
+    get_history(OptionsRef, MachineID, {undefined, undefined, forward}).
 
--spec get_history(options(), mg_core:id(), mg_core_events:history_range()) ->
+-spec get_history(mg_core_namespace:options_ref(), mg_core:id(), mg_core_events:history_range()) ->
     ok.
-get_history(Options, MachineID, HRange) ->
-    MgOptions = events_machine_options(Options),
-    Machine = mg_core_events_machine:get_machine(MgOptions, {id, MachineID}, HRange),
+get_history(OptionsRef, MachineID, HRange) ->
+    Machine = mg_core_events_machine:get_machine(OptionsRef, {id, MachineID}, HRange),
     {_AuxState, History} = decode_machine(Machine),
     History.
 

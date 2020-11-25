@@ -32,9 +32,8 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
--export([pool_child_spec/2, process_machine/7]).
-
--export([start/0]).
+-export([process_machine/7]).
+-export([get_machine/4]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -74,19 +73,18 @@ end_per_suite(C) ->
 -spec full_test(config()) ->
     _.
 full_test(_) ->
-    Options = automaton_options(),
-    AutomatonPid = start_automaton(Options),
+    {AutomatonPid, OptionsRef} = start_automaton(namespace_options()),
     % TODO убрать константы
     Pids =
         lists:map(
             fun(ID) ->
-                erlang:spawn_link(fun() -> check_chain(Options, ID), timer:sleep(100) end)
+                erlang:spawn_link(fun() -> check_chain(OptionsRef, ID), timer:sleep(100) end)
             end,
             lists:seq(1, 10)
         ),
     ok = timer:sleep(5 * 1000),
     ok = mg_core_ct_helper:stop_wait_all(Pids, shutdown, 5000),
-    ok = stop_automaton(AutomatonPid).
+    ok = stop_automaton(OptionsRef, AutomatonPid).
 
 %% TODO wait, simple_repair, kill, continuation
 -type id() :: pos_integer().
@@ -132,13 +130,13 @@ do_action(Options, ID, Seq, Action) ->
     try
         case Action of
             {start, ResultAction} ->
-                mg_core_machine:start(Options, id(ID), ResultAction, req_ctx(ID, Seq), mg_core_deadline:default());
+                mg_core_namespace:start(Options, id(ID), ResultAction, req_ctx(ID, Seq), mg_core_deadline:default());
             fail ->
-                mg_core_machine:fail(Options, id(ID), req_ctx(ID, Seq), mg_core_deadline:default());
+                mg_core_namespace:fail(Options, id(ID), req_ctx(ID, Seq), mg_core_deadline:default());
             {repair, ResultAction} ->
-                mg_core_machine:repair(Options, id(ID), ResultAction, req_ctx(ID, Seq), mg_core_deadline:default());
+                mg_core_namespace:repair(Options, id(ID), ResultAction, req_ctx(ID, Seq), mg_core_deadline:default());
             {call, ResultAction} ->
-                mg_core_machine:call(Options, id(ID), ResultAction, req_ctx(ID, Seq), mg_core_deadline:default())
+                mg_core_namespace:call(Options, id(ID), ResultAction, req_ctx(ID, Seq), mg_core_deadline:default())
         end
     catch
         throw:{logic, machine_failed         } -> failed;
@@ -191,13 +189,10 @@ next_state(State, Action, Result) -> erlang:error(bad_transition, [State, Action
 %%
 %% processor
 %%
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
-pool_child_spec(_Options, Name) ->
-    #{
-        id    => Name,
-        start => {?MODULE, start, []}
-    }.
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
 
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
@@ -221,30 +216,28 @@ map_flow_action(fail  , _  ) -> exit(fail).
 %%
 %% utils
 %%
--spec start()->
-    ignore.
-start() ->
-    ignore.
-
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_namespace:options()) ->
+    {pid(), mg_core_namespace:options_ref()}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    OptionsRef = mg_core_namespace:make_options_ref(maps:get(namespace, Options)),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_namespace:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRef, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
     ok.
 
--spec automaton_options() ->
-    mg_core_machine:options().
-automaton_options() ->
+-spec namespace_options() ->
+    mg_core_namespace:options().
+namespace_options() ->
     #{
         namespace => <<"test">>,
         processor => ?MODULE,
         storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE
     }.
 

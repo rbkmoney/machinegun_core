@@ -16,19 +16,21 @@
 
 -module(mg_core_machine_tags_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 %% tests descriptions
--export([all           /0]).
--export([groups        /0]).
+-export([all/0]).
+-export([groups/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
--export([tag           /1]).
+-export([tag/1]).
 -export([idempotent_tag/1]).
--export([double_tag    /1]).
--export([replace       /1]).
--export([resolve       /1]).
+-export([double_tag/1]).
+-export([replace/1]).
+-export([invalid_replace/1]).
+-export([resolve/1]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -56,6 +58,7 @@ groups() ->
             idempotent_tag,
             double_tag,
             replace,
+            invalid_replace,
             resolve
         ]}
     ].
@@ -69,14 +72,15 @@ init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_storage, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
-    Pid = start_automaton(automaton_options()),
+    {Pid, OptionsRef} = start_automaton(),
     true = erlang:unlink(Pid),
-    [{apps, Apps}, {pid, Pid}| C].
+    [{apps, Apps}, {pid, Pid}, {options_ref, OptionsRef} | C].
 
 -spec end_per_suite(config()) ->
     ok.
 end_per_suite(C) ->
     ok = proc_lib:stop(?config(pid, C)),
+    _ = persistent_term:erase(?config(options_ref, C)),
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
 
@@ -90,7 +94,7 @@ end_per_suite(C) ->
 -spec tag(config()) ->
     _.
 tag(_C) ->
-    ok = mg_core_machine_tags:add(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
+    ?assertEqual(ok, mg_core_machine_tags:add(tag_options(), ?TAG, ?ID, null, mg_core_deadline:default())).
 
 -spec idempotent_tag(config()) ->
     _.
@@ -100,42 +104,69 @@ idempotent_tag(C) ->
 -spec double_tag(config()) ->
     _.
 double_tag(_C) ->
-    {already_exists, ?ID} =
-        mg_core_machine_tags:add(automaton_options(), ?TAG, ?OTHER_ID, null, mg_core_deadline:default()).
+    ?assertEqual(
+        {already_exists, ?ID},
+        mg_core_machine_tags:add(tag_options(), ?TAG, ?OTHER_ID, null, mg_core_deadline:default())
+    ).
 
 -spec replace(config()) ->
     _.
 replace(_C) ->
-    ok = mg_core_machine_tags:replace(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
+    ?assertEqual(
+        ok,
+        mg_core_machine_tags:replace(tag_options(), ?TAG, ?ID, ?OTHER_ID, null, mg_core_deadline:default())
+    ).
+
+-spec invalid_replace(config()) ->
+    _.
+invalid_replace(_C) ->
+    ?assertEqual(
+        {invalid_old_id, ?OTHER_ID},
+        mg_core_machine_tags:replace(
+            tag_options(), ?TAG, ?ID, ?OTHER_ID, null, mg_core_deadline:default()
+        )
+    ).
 
 -spec resolve(config()) ->
     _.
 resolve(_C) ->
-    ?ID = mg_core_machine_tags:resolve(automaton_options(), ?TAG).
+    ?assertEqual(?OTHER_ID, mg_core_machine_tags:resolve(tag_options(), ?TAG)).
 
 %%
 %% utils
 %%
--spec start_automaton(mg_core_machine_tags:options()) ->
-    pid().
-start_automaton(Options) ->
-    mg_core_utils:throw_if_error(
+-spec start_automaton() ->
+    {pid(), mg_core_namespace:options_ref()}.
+start_automaton() ->
+    OptionsRef = save_tag_namespace_options(),
+    Pid = mg_core_utils:throw_if_error(
         mg_core_utils_supervisor_wrapper:start_link(
             #{strategy => one_for_all},
-            [mg_core_machine_tags:child_spec(Options, tags)]
+            [mg_core_machine_tags:child_spec(tag_options(), tags)]
         )
-    ).
+    ),
+    {Pid, OptionsRef}.
 
--spec automaton_options() ->
+-spec tag_options() ->
     mg_core_machine_tags:options().
-automaton_options() ->
+tag_options() ->
     #{
+        namespace_options_ref => mg_core_namespace:make_options_ref(<<"test_tags">>)
+    }.
+
+-spec save_tag_namespace_options() ->
+    mg_core_namespace:options_ref().
+save_tag_namespace_options() ->
+    NS = <<"test_tags">>,
+    Options = mg_core_machine_tags:make_namespace_options(#{
         namespace => <<"test_tags">>,
         storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
-        pulse     => ?MODULE,
-        retries   => #{}
-    }.
+        registry  => mg_core_procreg_gproc,
+        pulse     => ?MODULE
+    }),
+    OptionsRef = mg_core_namespace:make_options_ref(NS),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    OptionsRef.
 
 -spec handle_beat(_, mg_core_pulse:beat()) ->
     ok.

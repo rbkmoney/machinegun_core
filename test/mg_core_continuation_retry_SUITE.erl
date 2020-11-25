@@ -28,6 +28,7 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
+-export([get_machine/4]).
 -export([process_machine/7]).
 
 %% Pulse
@@ -75,18 +76,23 @@ end_per_suite(C) ->
 -spec continuation_delayed_retries_test(config()) ->
     _.
 continuation_delayed_retries_test(_C) ->
-    Options = automaton_options(),
-    Pid = start_automaton(Options),
+    OptionsRef = save_namespace_options(),
+    Pid = start_automaton(OptionsRef),
     ID = ?MH_ID,
-    ok = mg_core_machine:start(Options, ID, #{},  ?REQ_CTX, mg_core_deadline:default()),
-    ok = mg_core_machine:call (Options, ID, test, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(OptionsRef, ID, #{},  ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(OptionsRef, ID, test, ?REQ_CTX, mg_core_deadline:default()),
     ok = timer:sleep(?TEST_SLEEP),
     2  = get_fail_count(),
-    _  = stop_automaton(Pid).
+    _  = stop_automaton(OptionsRef, Pid).
 
 %%
 %% processor
 %%
+
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
 
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
@@ -117,30 +123,36 @@ update_fail_count(FailCount) ->
     true = ets:insert(?ETS_NS, {fail_count, FailCount}),
     ok.
 
--spec start_automaton(mg_core_machine:options()) ->
+-spec start_automaton(mg_core_machine:options_ref()) ->
     pid().
-start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+start_automaton(OptionsRef) ->
+    mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)).
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_machine:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRef, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
     ok.
 
--spec automaton_options() ->
-    mg_core_machine:options().
-automaton_options() ->
-    #{
+-spec save_namespace_options() ->
+    mg_core_namespace:options_ref().
+save_namespace_options() ->
+    Options = #{
         namespace => ?MH_NS,
         processor => ?MODULE,
         storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
-        retries   => #{
-            continuation => {intervals, ?TEST_INTERVALS}
+        machine   => #{
+            retries   => #{
+                continuation => {intervals, ?TEST_INTERVALS}
+            }
         }
-    }.
+    },
+    OptionsRef = mg_core_namespace:make_options_ref(?MH_NS),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    OptionsRef.
 
 -spec handle_beat(_, mg_core_pulse:beat()) ->
     ok.

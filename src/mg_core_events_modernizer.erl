@@ -48,11 +48,11 @@
 -type ref()           :: mg_core_events_machine:ref().
 -type history_range() :: mg_core_events:history_range().
 
--spec modernize_machine(options(), mg_core_events_machine:options(), request_context(), ref(), history_range()) ->
+-spec modernize_machine(options(), mg_core_namespace:options_ref(), request_context(), ref(), history_range()) ->
     ok.
-modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
+modernize_machine(Options, NSOptionsRef, ReqCtx, Ref, HRange) ->
     #{ns := NS, id := ID, history := History} =
-        mg_core_events_machine:get_machine(EventsMachineOptions, Ref, HRange),
+        mg_core_events_machine:get_machine(NSOptionsRef, Ref, HRange),
     OutdatedHistory = filter_outdated_history(Options, History),
     lists:foreach(
         fun (Event) ->
@@ -61,7 +61,7 @@ modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
                 Event ->
                     ok;
                 ModernizedEvent ->
-                    store_event(EventsMachineOptions, ID, ModernizedEvent)
+                    store_event(NSOptionsRef, ID, ModernizedEvent)
             end
         end,
         OutdatedHistory
@@ -88,10 +88,11 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
             erlang:throw({logic, {invalid_modernized_version, Versions}})
     end.
 
--spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) ->
+-spec store_event(mg_core_namespace:options_ref(), mg_core:id(), mg_core_events:event()) ->
     ok.
-store_event(Options, ID, Event) ->
-    mg_core_events_storage:store_event(Options, ID, Event).
+store_event(NSOptionsRef, ID, Event) ->
+    EventsMachineOptions = get_events_machine_options(NSOptionsRef),
+    mg_core_events_storage:store_event(EventsMachineOptions, ID, Event).
 
 -spec filter_outdated_history(options(), [mg_core_events:event()]) ->
     [mg_core_events:event()].
@@ -124,3 +125,11 @@ event_to_machine_event(NS, ID, Event) ->
 call_handler(#{handler := Handler}, ReqCtx, MachineEvent) ->
     % TODO обработка ошибок?
     mg_core_utils:apply_mod_opts(Handler, modernize_event, [ReqCtx, MachineEvent]).
+
+-spec get_events_machine_options(mg_core_namespace:options_ref()) ->
+    mg_core_events_machine:options().
+get_events_machine_options(NSOptionsRef) ->
+    NSOptions = mg_core_namespace:load_options(NSOptionsRef),
+    #{processor := Processor} = NSOptions,
+    {mg_core_events_machine, EventsMachineOptions} = Processor,
+    EventsMachineOptions.

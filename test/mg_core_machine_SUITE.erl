@@ -30,9 +30,8 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
--export([pool_child_spec/2, process_machine/7]).
-
--export([start/0]).
+-export([process_machine/7]).
+-export([get_machine/4]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -101,61 +100,57 @@ end_per_group(_, _C) ->
 -spec simple_test(config()) ->
     _.
 simple_test(C) ->
-    Options = automaton_options(C),
     TestKey = <<"test_key">>,
     ID = <<"42">>,
-    Pid = start_automaton(Options),
+    {Pid, Options} = start_automaton(namespace_options(C)),
 
     {logic, machine_not_found} =
-        (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
 
-    ok = mg_core_machine:start(Options, ID, {TestKey, 0}, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, {TestKey, 0}, ?req_ctx, mg_core_deadline:default()),
     {logic, machine_already_exist} =
-        (catch mg_core_machine:start(Options, ID, {TestKey, 0}, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_namespace:start(Options, ID, {TestKey, 0}, ?req_ctx, mg_core_deadline:default())),
 
-    0  = mg_core_machine:call (Options, ID, get              , ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call (Options, ID, increment        , ?req_ctx, mg_core_deadline:default()),
-    1  = mg_core_machine:call (Options, ID, get              , ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call (Options, ID, delayed_increment, ?req_ctx, mg_core_deadline:default()),
+    0  = mg_core_namespace:call (Options, ID, get              , ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call (Options, ID, increment        , ?req_ctx, mg_core_deadline:default()),
+    1  = mg_core_namespace:call (Options, ID, get              , ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call (Options, ID, delayed_increment, ?req_ctx, mg_core_deadline:default()),
     ok = timer:sleep(2000),
-    2  = mg_core_machine:call (Options, ID, get              , ?req_ctx, mg_core_deadline:default()),
+    2  = mg_core_namespace:call (Options, ID, get              , ?req_ctx, mg_core_deadline:default()),
 
     % call fail/simple_repair
     {logic, machine_failed} =
-        (catch mg_core_machine:call         (Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
-    ok             =        mg_core_machine:simple_repair(Options, ID,       ?req_ctx, mg_core_deadline:default()),
-    2              =        mg_core_machine:call         (Options, ID, get , ?req_ctx, mg_core_deadline:default()),
+        (catch mg_core_namespace:call   (Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
+    ok = mg_core_namespace:simple_repair(Options, ID,       ?req_ctx, mg_core_deadline:default()),
+    2  = mg_core_namespace:call         (Options, ID, get , ?req_ctx, mg_core_deadline:default()),
 
     % call fail/repair
-    {logic, machine_failed} = (catch mg_core_machine:call  (Options, ID, fail      , ?req_ctx, mg_core_deadline:default())),
-    repaired                =        mg_core_machine:repair(Options, ID, repair_arg, ?req_ctx, mg_core_deadline:default()),
-    2                       =        mg_core_machine:call  (Options, ID, get       , ?req_ctx, mg_core_deadline:default()),
+    {logic, machine_failed} = (catch mg_core_namespace:call  (Options, ID, fail      , ?req_ctx, mg_core_deadline:default())),
+    repaired                =        mg_core_namespace:repair(Options, ID, repair_arg, ?req_ctx, mg_core_deadline:default()),
+    2                       =        mg_core_namespace:call  (Options, ID, get       , ?req_ctx, mg_core_deadline:default()),
 
     % call fail/repair fail/repair
-    {logic, machine_failed} = (catch mg_core_machine:call(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
-    {logic, machine_failed} = (catch mg_core_machine:repair(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
-    repaired = mg_core_machine:repair(Options, ID, repair_arg, ?req_ctx, mg_core_deadline:default()),
+    {logic, machine_failed} = (catch mg_core_namespace:call(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
+    {logic, machine_failed} = (catch mg_core_namespace:repair(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
+    repaired = mg_core_namespace:repair(Options, ID, repair_arg, ?req_ctx, mg_core_deadline:default()),
     {logic, machine_already_working} =
-        (catch mg_core_machine:repair(Options, ID, repair_arg, ?req_ctx, mg_core_deadline:default())),
-    2  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+        (catch mg_core_namespace:repair(Options, ID, repair_arg, ?req_ctx, mg_core_deadline:default())),
+    2  = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
 
-    ok  = mg_core_machine:call(Options, ID, remove, ?req_ctx, mg_core_deadline:default()),
+    ok  = mg_core_namespace:call(Options, ID, remove, ?req_ctx, mg_core_deadline:default()),
 
     {logic, machine_not_found} =
-        (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
 
-    ok = stop_automaton(Pid).
+    ok = stop_automaton(Options, Pid).
 
 %%
 %% processor
 %%
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
-pool_child_spec(_Options, Name) ->
-    #{
-        id    => Name,
-        start => {?MODULE, start, []}
-    }.
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
 
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
@@ -180,31 +175,29 @@ process_machine(_, _, {repair, repair_arg}, _, ?req_ctx, _, [TestKey, TestValue]
 %%
 %% utils
 %%
--spec start()->
-    ignore.
-start() ->
-    ignore.
-
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_namespace:options()) ->
+    {pid(), mg_core_namespace:options_ref()}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    OptionsRef = mg_core_namespace:make_options_ref(maps:get(namespace, Options)),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_namespace:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRef, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
     ok.
 
--spec automaton_options(config()) ->
-    mg_core_machine:options().
-automaton_options(C) ->
+-spec namespace_options(config()) ->
+    mg_core_namespace:options().
+namespace_options(C) ->
     Scheduler = #{},
     #{
         namespace => <<"test">>,
         processor => ?MODULE,
         storage   => mg_core_storage_memory,
-        worker    => #{registry => ?config(registry, C)},
+        registry  => ?config(registry, C),
         pulse     => ?MODULE,
         schedulers => #{
             timers         => Scheduler,

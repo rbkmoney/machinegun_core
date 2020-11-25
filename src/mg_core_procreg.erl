@@ -26,11 +26,14 @@
 -type procreg_options() :: term().
 -type options() :: mg_core_utils:mod_opts(procreg_options()).
 
+-type mfargs() :: {module(), Function :: atom(), Args :: [term()]}.
+
 -export_type([name/0]).
 -export_type([name_pattern/0]).
 -export_type([ref/0]).
 -export_type([reg_name/0]).
 -export_type([options/0]).
+-export_type([mfargs/0]).
 
 -export_type([start_link_ret/0]).
 
@@ -38,9 +41,9 @@
 -export([reg_name/2]).
 -export([select/2]).
 
--export([start_link/5]).
--export([call/3]).
--export([call/4]).
+-export([start_link/3]).
+-export([wrap_child_spec/2]).
+-export([call/2]).
 
 %% Names and references
 
@@ -53,16 +56,16 @@
 -callback select(procreg_options(), name_pattern()) ->
     [{name(), pid()}].
 
--callback call(procreg_options(), ref(), _Call, timeout()) ->
+-callback call(procreg_options(), mfargs()) ->
     _Reply.
 
 -type start_link_ret() ::
     {ok, pid()} | {error, term()}.
 
--callback start_link(procreg_options(), reg_name(), module(), _Args, list()) ->
+-callback start_link(procreg_options(), mfargs()) ->
     start_link_ret().
 
-%%
+%% API
 
 -spec ref(options(), name()) ->
     ref().
@@ -79,17 +82,25 @@ reg_name(Options, Name) ->
 select(Options, NamePattern) ->
     mg_core_utils:apply_mod_opts(Options, select, [NamePattern]).
 
--spec call(options(), name(), _Call) ->
+-spec call(options(), mfargs()) ->
     _Reply.
-call(Options, Name, Call) ->
-    call(Options, Name, Call, 5000).
+call(Options, CallMFA) ->
+    mg_core_utils:apply_mod_opts(Options, call, [CallMFA]).
 
--spec call(options(), name(), _Call, timeout()) ->
-    _Reply.
-call(Options, Name, Call, Timeout) ->
-    mg_core_utils:apply_mod_opts(Options, call, [ref(Options, Name), Call, Timeout]).
-
--spec start_link(options(), name(), module(), _Args, list()) ->
+-spec start_link(options(), mfargs(), list()) ->
     start_link_ret().
-start_link(Options, Name, Module, Args, Opts) ->
-    mg_core_utils:apply_mod_opts(Options, start_link, [reg_name(Options, Name), Module, Args, Opts]).
+start_link(Options, StartMFA, Args) ->
+    mg_core_utils:apply_mod_opts(Options, start_link, [add_args(StartMFA, Args)]).
+
+-spec wrap_child_spec(options(), supervisor:child_spec()) ->
+    supervisor:child_spec().
+wrap_child_spec(Options, Spec) ->
+    #{start := StartMFAargs} = Spec,
+    Spec#{start => {?MODULE, start_link, [Options, StartMFAargs]}}.
+
+%% Internals
+
+-spec add_args(mfargs(), Agrs :: list()) ->
+    mfargs().
+add_args({M, F, A}, Args) ->
+    {M, F, A ++ Args}.

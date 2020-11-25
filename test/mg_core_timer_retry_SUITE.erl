@@ -31,9 +31,8 @@
 
 %% mg_core_machine
 -behaviour(mg_core_machine).
--export([pool_child_spec/2, process_machine/7]).
-
--export([start/0]).
+-export([process_machine/7]).
+-export([get_machine/4]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -99,20 +98,19 @@ transient_fail(_C) ->
     BinTestName = genlib:to_binary(transient_fail),
     NS = BinTestName,
     ID = BinTestName,
-    Options = automaton_options(NS, {intervals, [1000, 1000, 1000, 1000, 1000, 1000, 1000]}),
-    Pid = start_automaton(Options),
+    {Pid, Options} = start_automaton(namespace_options(NS, {intervals, [1000, 1000, 1000, 1000, 1000, 1000, 1000]})),
 
-    ok = mg_core_machine:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
-    0  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, {set_mode, <<"failing">>}, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
+    0  = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(Options, ID, {set_mode, <<"failing">>}, ?req_ctx, mg_core_deadline:default()),
     ok = timer:sleep(3000),
-    0  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, {set_mode, <<"counting">>}, ?req_ctx, mg_core_deadline:default()),
+    0  = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(Options, ID, {set_mode, <<"counting">>}, ?req_ctx, mg_core_deadline:default()),
     ok = timer:sleep(3000),
-    I  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    I  = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
     true = I > 0,
 
-    ok = stop_automaton(Pid).
+    ok = stop_automaton(Options, Pid).
 
 -spec permanent_fail(config()) ->
     _.
@@ -120,27 +118,23 @@ permanent_fail(_C) ->
     BinTestName = genlib:to_binary(permanent_fail),
     NS = BinTestName,
     ID = BinTestName,
-    Options = automaton_options(NS, {intervals, [1000]}),
-    Pid = start_automaton(Options),
+    {Pid, Options} = start_automaton(namespace_options(NS, {intervals, [1000]})),
 
-    ok = mg_core_machine:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
-    0  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, {set_mode, <<"failing">>}, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
+    0  = mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_namespace:call(Options, ID, {set_mode, <<"failing">>}, ?req_ctx, mg_core_deadline:default()),
     ok = timer:sleep(4000),
-    {logic, machine_failed} = (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+    {logic, machine_failed} = (catch mg_core_namespace:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
 
-    ok = stop_automaton(Pid).
+    ok = stop_automaton(Options, Pid).
 
 %%
 %% processor
 %%
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
-pool_child_spec(_Options, Name) ->
-    #{
-        id    => Name,
-        start => {?MODULE, start, []}
-    }.
+-spec get_machine(_Options, mg_core:id(), _Args, mg_core_machine:machine_state()) ->
+    mg_core_machine:processor_result() | no_return().
+get_machine(_, _, _, State) ->
+    State.
 
 -spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
     mg_core_machine:processor_result() | no_return().
@@ -160,25 +154,23 @@ process_machine(_, _, timeout, _, ?req_ctx, _, [<<"failing">>, _Counter]) ->
 %%
 %% utils
 %%
--spec start()->
-    ignore.
-start() ->
-    ignore.
-
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_namespace:options()) ->
+    {pid(), mg_core_namespace:options_ref()}.
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
+    OptionsRef = mg_core_namespace:make_options_ref(maps:get(namespace, Options)),
+    ok = mg_core_namespace:save_options(Options, OptionsRef),
+    {mg_core_utils:throw_if_error(mg_core_namespace:start_link(OptionsRef)), OptionsRef}.
 
--spec stop_automaton(pid()) ->
+-spec stop_automaton(mg_core_namespace:options_ref(), pid()) ->
     ok.
-stop_automaton(Pid) ->
+stop_automaton(OptionsRef, Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
+    _ = persistent_term:erase(OptionsRef),
     ok.
 
--spec automaton_options(mg_core:ns(), mg_core_retry:policy()) ->
-    mg_core_machine:options().
-automaton_options(NS, RetryPolicy) ->
+-spec namespace_options(mg_core:ns(), mg_core_retry:policy()) ->
+    mg_core_namespace:options().
+namespace_options(NS, RetryPolicy) ->
     Scheduler = #{
         min_scan_delay => 1000,
         target_cutoff  => 15
@@ -187,12 +179,12 @@ automaton_options(NS, RetryPolicy) ->
         namespace => NS,
         processor => ?MODULE,
         storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{
-            registry => mg_core_procreg_gproc
-        },
+        registry  => mg_core_procreg_gproc,
         pulse     => ?MODULE,
-        retries   => #{
-            timers         => RetryPolicy
+        machine   => #{
+            retries => #{
+                timers => RetryPolicy
+            }
         },
         schedulers => #{
             timers         => Scheduler,
