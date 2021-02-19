@@ -31,26 +31,24 @@
 -type sup_flags() :: supervisor:sup_flags().
 -type child_spec() :: supervisor:child_spec().
 
--spec child_spec(sup_flags(), [child_spec()], _ChildID) ->
-    child_spec().
+-spec child_spec(sup_flags(), [child_spec()], _ChildID) -> child_spec().
 child_spec(Flags, Childspecs, ChildID) ->
     #{
-        id    => ChildID,
+        id => ChildID,
         start => {mg_core_utils_supervisor_wrapper, start_link, [Flags, Childspecs]},
-        type  => supervisor
+        type => supervisor
     }.
 
 -spec child_spec(mg_core_utils:gen_reg_name(), sup_flags(), [child_spec()], _ChildID) ->
     child_spec().
 child_spec(RegName, Flags, Childspecs, ChildID) ->
     #{
-        id    => ChildID,
+        id => ChildID,
         start => {mg_core_utils_supervisor_wrapper, start_link, [RegName, Flags, Childspecs]},
-        type  => supervisor
+        type => supervisor
     }.
 
--spec start_link(sup_flags(), [child_spec()]) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(sup_flags(), [child_spec()]) -> mg_core_utils:gen_start_ret().
 start_link(Flags, ChildsSpecs) ->
     supervisor:start_link(?MODULE, {Flags, ChildsSpecs}).
 
@@ -62,7 +60,6 @@ start_link(RegName, Flags, ChildsSpecs) ->
 %%
 %% supervisor callbacks
 %%
--spec init({sup_flags(), [child_spec()]}) ->
-    mg_core_utils:supervisor_ret().
+-spec init({sup_flags(), [child_spec()]}) -> mg_core_utils:supervisor_ret().
 init({Flags, ChildsSpecs}) ->
     {ok, {Flags, ChildsSpecs}}.

@@ -40,6 +40,8 @@ CALL_ANYWHERE := \
 	submodules \
 	compile \
 	xref \
+	format \
+	check_format \
 	lint \
 	dialyze \
 	start \
@@ -71,6 +73,12 @@ xref: submodules
 
 lint:
 	elvis rock
+
+check_format:
+	$(REBAR) fmt -c
+
+format:
+	$(REBAR) fmt -w
 
 dialyze:
 	$(REBAR) dialyzer

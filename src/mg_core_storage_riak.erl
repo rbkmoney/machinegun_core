@@ -63,63 +63,66 @@
 % from riakc
 % -type bucket() :: binary().
 -type options() :: #{
-    name                := mg_core_storage:name(),
-    host                := inet:ip_address() | inet:hostname() | binary(),
-    port                := inet:port_number(),
-    bucket              := bucket(),
-    pool_options        := pool_options(),
-    pulse               := mg_core_pulse:handler(),
-    resolve_timeout     => timeout(),
-    connect_timeout     => timeout(),
-    request_timeout     => timeout(),
+    name := mg_core_storage:name(),
+    host := inet:ip_address() | inet:hostname() | binary(),
+    port := inet:port_number(),
+    bucket := bucket(),
+    pool_options := pool_options(),
+    pulse := mg_core_pulse:handler(),
+    resolve_timeout => timeout(),
+    connect_timeout => timeout(),
+    request_timeout => timeout(),
     index_query_timeout => timeout(),
-    r_options           => _,
-    w_options           => _,
-    d_options           => _
+    r_options => _,
+    w_options => _,
+    d_options => _
 }.
 
 -type context() :: riakc_obj:vclock() | undefined.
 
--type index_opt() :: {timeout, timeout()} |
-                     {call_timeout, timeout()} |
-                     {stream, boolean()} |
-                     {continuation, binary()} |
-                     {pagination_sort, boolean()} |
-                     {max_results, non_neg_integer() | all}.
--type range_index_opt() :: {return_terms, boolean()} |
-                           {term_regex, binary()}.
+-type index_opt() ::
+    {timeout, timeout()}
+    | {call_timeout, timeout()}
+    | {stream, boolean()}
+    | {continuation, binary()}
+    | {pagination_sort, boolean()}
+    | {max_results, non_neg_integer() | all}.
+-type range_index_opt() ::
+    {return_terms, boolean()}
+    | {term_regex, binary()}.
 -type range_index_opts() :: [index_opt() | range_index_opt()].
 -type client_ref() :: mg_core_utils:gen_ref().
 
 %% See https://github.com/seth/pooler/blob/master/src/pooler_config.erl for pool option details
 -type pool_options() :: #{
-    init_count          := non_neg_integer(),
-    max_count           := non_neg_integer(),
-    idle_timeout        => timeout(),
-    cull_interval       => timeout(),
+    init_count := non_neg_integer(),
+    max_count := non_neg_integer(),
+    idle_timeout => timeout(),
+    cull_interval => timeout(),
     auto_grow_threshold => non_neg_integer(),
-    queue_max           => non_neg_integer(),
-    metrics_mod         => module() | pooler_no_metrics,
-    metrics_api         => folsom | exometer
+    queue_max => non_neg_integer(),
+    metrics_mod => module() | pooler_no_metrics,
+    metrics_api => folsom | exometer
 }.
 
--define(TAKE_CLIENT_TIMEOUT, 30000).  %% TODO: Replace by deadline
+%% TODO: Replace by deadline
+-define(TAKE_CLIENT_TIMEOUT, 30000).
 
 %%
 %% API
 %%
 
 -spec pool_utilization(options()) ->
-    {ok, [{MetricName :: atom(), Value :: integer()}]} |
-    {error, {transient, timeout | killed | noproc}}.
+    {ok, [{MetricName :: atom(), Value :: integer()}]}
+    | {error, {transient, timeout | killed | noproc}}.
 pool_utilization(Options) ->
     try
         {ok, pooler:pool_utilization(pool_name(Options))}
     catch
         exit:{Reason, _MFA} when
             Reason =:= timeout orelse
-            Reason =:= killed orelse
-            Reason =:= noproc
+                Reason =:= killed orelse
+                Reason =:= noproc
         ->
             {error, {transient, Reason}}
     end.
@@ -128,14 +131,12 @@ pool_utilization(Options) ->
 %% internal API
 %%
 
--spec start_client(options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_client(options()) -> mg_core_utils:gen_start_ret().
 start_client(#{port := Port} = Options) ->
     IP = get_riak_addr(Options),
     riakc_pb_socket:start_link(IP, Port, [{connect_timeout, get_option(connect_timeout, Options)}]).
 
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(options()) -> mg_core_utils:gen_start_ret().
 start_link(Options) ->
     PoolConfig = pooler_config:list_to_pool(make_pool_config(Options)),
     pooler_pool_sup:start_link(PoolConfig).
@@ -144,18 +145,16 @@ start_link(Options) ->
 %% mg_core_storage callbacks
 %%
 
--spec child_spec(options(), atom()) ->
-    supervisor:child_spec().
+-spec child_spec(options(), atom()) -> supervisor:child_spec().
 child_spec(Options, ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options]},
-        restart  => permanent,
-        type     => supervisor
+        id => ChildID,
+        start => {?MODULE, start_link, [Options]},
+        restart => permanent,
+        type => supervisor
     }.
 
--spec do_request(options(), mg_core_storage:request()) ->
-    mg_core_storage:response().
+-spec do_request(options(), mg_core_storage:request()) -> mg_core_storage:response().
 do_request(Options, Request) ->
     ClientRef = take_client(Options),
     try
@@ -203,16 +202,28 @@ try_do_request(Options, ClientRef, Request) ->
             delete(Options, ClientRef, Key, Context)
     end.
 
--spec put(options(), client_ref(), mg_core_storage:key(), context(), mg_core_storage:value(), IndexesUpdates) ->
-    context()
-when
+-spec put(
+    options(),
+    client_ref(),
+    mg_core_storage:key(),
+    context(),
+    mg_core_storage:value(),
+    IndexesUpdates
+) -> context() when
     IndexesUpdates :: [mg_core_storage:index_update()].
 put(Options = #{bucket := Bucket}, ClientRef, Key, Context, Value, IndexesUpdates) ->
     Object = to_riak_obj(Bucket, Key, Context, Value, IndexesUpdates),
     Timeout = get_option(request_timeout, Options),
     NewObject =
         handle_riak_response(
-            ?SAFE(riakc_pb_socket:put(ClientRef, Object, [return_body] ++ get_option(w_options, Options), Timeout))
+            ?SAFE(
+                riakc_pb_socket:put(
+                    ClientRef,
+                    Object,
+                    [return_body] ++ get_option(w_options, Options),
+                    Timeout
+                )
+            )
         ),
     riakc_obj:vclock(NewObject).
 
@@ -220,7 +231,9 @@ put(Options = #{bucket := Bucket}, ClientRef, Key, Context, Value, IndexesUpdate
     {context(), mg_core_storage:value()} | undefined.
 get(Options = #{bucket := Bucket}, ClientRef, Key) ->
     Timeout = get_option(request_timeout, Options),
-    case ?SAFE(riakc_pb_socket:get(ClientRef, Bucket, Key, get_option(r_options, Options), Timeout)) of
+    case
+        ?SAFE(riakc_pb_socket:get(ClientRef, Bucket, Key, get_option(r_options, Options), Timeout))
+    of
         {error, notfound} ->
             undefined;
         Result ->
@@ -235,10 +248,19 @@ search(Options = #{bucket := Bucket}, ClientRef, Query) ->
     Result = handle_riak_response_(do_get_index(ClientRef, Bucket, LiftedQuery, Options)),
     get_index_response(LiftedQuery, Result).
 
--spec delete(options(), client_ref(), mg_core_storage:key(), context()) ->
-    ok.
+-spec delete(options(), client_ref(), mg_core_storage:key(), context()) -> ok.
 delete(Options = #{bucket := Bucket}, ClientRef, Key, Context) ->
-    case ?SAFE(riakc_pb_socket:delete_vclock(ClientRef, Bucket, Key, Context, get_option(d_options, Options))) of
+    case
+        ?SAFE(
+            riakc_pb_socket:delete_vclock(
+                ClientRef,
+                Bucket,
+                Key,
+                Context,
+                get_option(d_options, Options)
+            )
+        )
+    of
         ok ->
             ok;
         {error, Reason} ->
@@ -247,21 +269,41 @@ delete(Options = #{bucket := Bucket}, ClientRef, Key, Context) ->
 
 %%
 
--spec do_get_index(client_ref(), bucket(), mg_core_storage:index_query(), options()) ->
-    _.
+-spec do_get_index(client_ref(), bucket(), mg_core_storage:index_query(), options()) -> _.
 do_get_index(ClientRef, Bucket, {IndexName, {From, To}, IndexLimit, Continuation}, Options) ->
     SearchOptions = index_opts([{return_terms, true}], Options, IndexLimit, Continuation),
-    ?SAFE(riakc_pb_socket:get_index_range(ClientRef, Bucket, prepare_index_name(IndexName), From, To, SearchOptions));
+    ?SAFE(
+        riakc_pb_socket:get_index_range(
+            ClientRef,
+            Bucket,
+            prepare_index_name(IndexName),
+            From,
+            To,
+            SearchOptions
+        )
+    );
 do_get_index(ClientRef, Bucket, {IndexName, Value, IndexLimit, Continuation}, Options) ->
     SearchOptions = index_opts(Options, IndexLimit, Continuation),
-    ?SAFE(riakc_pb_socket:get_index_eq(ClientRef, Bucket, prepare_index_name(IndexName), Value, SearchOptions)).
+    ?SAFE(
+        riakc_pb_socket:get_index_eq(
+            ClientRef,
+            Bucket,
+            prepare_index_name(IndexName),
+            Value,
+            SearchOptions
+        )
+    ).
 
 -spec get_index_response(mg_core_storage:index_query(), get_index_results()) ->
     mg_core_storage:search_result().
-get_index_response({_, Val, Limit, _}, #index_results_v1{keys = [], continuation = Cont}) when is_tuple(Val) ->
+get_index_response({_, Val, Limit, _}, #index_results_v1{keys = [], continuation = Cont}) when
+    is_tuple(Val)
+->
     % это какой-то пипец, а не код, они там все упоролись что-ли?
     wrap_index_response([], Limit, Cont);
-get_index_response({_, Val, Limit, _}, #index_results_v1{terms = Terms, continuation = Cont}) when is_tuple(Val) ->
+get_index_response({_, Val, Limit, _}, #index_results_v1{terms = Terms, continuation = Cont}) when
+    is_tuple(Val)
+->
     Res = lists:map(
         fun({IndexValue, Key}) ->
             {erlang:binary_to_integer(IndexValue), Key}
@@ -277,11 +319,10 @@ get_index_response({_, _, Limit, _}, #index_results_v1{keys = Keys, continuation
 wrap_index_response(Res, Limit, Cont) ->
     case Limit of
         inf -> Res;
-        _   -> {Res, Cont}
+        _ -> {Res, Cont}
     end.
 
--spec lift_query(mg_core_storage:index_query()) ->
-    mg_core_storage:index_query().
+-spec lift_query(mg_core_storage:index_query()) -> mg_core_storage:index_query().
 lift_query({Name, Val}) ->
     {Name, Val, inf, undefined};
 lift_query({Name, Val, Limit}) ->
@@ -289,8 +330,7 @@ lift_query({Name, Val, Limit}) ->
 lift_query({Name, Val, Limit, Continuation}) ->
     {Name, Val, Limit, Continuation}.
 
--spec index_opts(options(), mg_core_storage:index_limit(), continuation()) ->
-    range_index_opts().
+-spec index_opts(options(), mg_core_storage:index_limit(), continuation()) -> range_index_opts().
 index_opts(Options, IndexLimit, Continuation) ->
     index_opts([], Options, IndexLimit, Continuation).
 
@@ -304,24 +344,21 @@ index_opts(DefaultOpts, Options, IndexLimit, Continuation) ->
         DefaultOpts
     ]).
 
--spec continuation_opts(continuation()) ->
-    range_index_opts().
+-spec continuation_opts(continuation()) -> range_index_opts().
 continuation_opts(Continuation) ->
     case Continuation of
         undefined -> [];
-        _         -> [{continuation, Continuation}]
+        _ -> [{continuation, Continuation}]
     end.
 
--spec max_result_opts(mg_core_storage:index_limit()) ->
-    range_index_opts().
+-spec max_result_opts(mg_core_storage:index_limit()) -> range_index_opts().
 max_result_opts(IndexLimit) ->
     case IndexLimit of
         inf -> [];
-        _   -> [{max_results, IndexLimit}]
+        _ -> [{max_results, IndexLimit}]
     end.
 
--spec common_index_opts(options()) ->
-    range_index_opts().
+-spec common_index_opts(options()) -> range_index_opts().
 common_index_opts(Options) ->
     [{pagination_sort, true}, {timeout, get_option(index_query_timeout, Options)}].
 
@@ -329,13 +366,17 @@ common_index_opts(Options) ->
 %% packer
 %%
 %% фи-фи подтекает абстракция вызова mg_core_storage:opaque_to_binary(Value)
--define(msgpack_ct           , "application/x-msgpack").
--define(schema_version_md_key, <<"schema-version">>   ).
--define(schema_version_1     , <<"1">>                ).
+-define(msgpack_ct, "application/x-msgpack").
+-define(schema_version_md_key, <<"schema-version">>).
+-define(schema_version_1, <<"1">>).
 
--spec to_riak_obj(bucket(), mg_core_storage:key(), context(), mg_core_storage:value(), IndexesUpdates) ->
-    riakc_obj:riakc_obj()
-when
+-spec to_riak_obj(
+    bucket(),
+    mg_core_storage:key(),
+    context(),
+    mg_core_storage:value(),
+    IndexesUpdates
+) -> riakc_obj:riakc_obj() when
     IndexesUpdates :: [mg_core_storage:index_update()].
 to_riak_obj(Bucket, Key, Context, Value, IndexesUpdates) ->
     Object = riakc_obj:set_vclock(new_riak_object(Bucket, Key, Value), Context),
@@ -363,30 +404,26 @@ new_riak_object(Bucket, Key, Value) ->
             Obj
     end.
 
--spec from_riak_obj(riakc_obj:riakc_obj()) ->
-    {context(), mg_core_storage:value()}.
+-spec from_riak_obj(riakc_obj:riakc_obj()) -> {context(), mg_core_storage:value()}.
 from_riak_obj(Object) ->
-    Metadata          = riakc_obj:get_metadata(Object),
+    Metadata = riakc_obj:get_metadata(Object),
     ?schema_version_1 = riakc_obj:get_user_metadata_entry(Metadata, ?schema_version_md_key),
-    ?msgpack_ct       = riakc_obj:get_content_type(Object),
+    ?msgpack_ct = riakc_obj:get_content_type(Object),
     {riakc_obj:vclock(Object), mg_core_storage:binary_to_opaque(riakc_obj:get_value(Object))}.
 
--type riak_index_name  () :: {integer_index, list()}.
+-type riak_index_name() :: {integer_index, list()}.
 -type riak_index_update() :: {riak_index_name(), [mg_core_storage:index_value()]}.
 -type get_index_results() :: #index_results_v1{}.
 
--spec prepare_indexes_updates([mg_core_storage:index_update()]) ->
-    [riak_index_update()].
+-spec prepare_indexes_updates([mg_core_storage:index_update()]) -> [riak_index_update()].
 prepare_indexes_updates(IndexesUpdates) ->
     [prepare_index_update(IndexUpdate) || IndexUpdate <- IndexesUpdates].
 
--spec prepare_index_update(mg_core_storage:index_update()) ->
-    riak_index_update().
+-spec prepare_index_update(mg_core_storage:index_update()) -> riak_index_update().
 prepare_index_update({IndexName, IndexValue}) ->
     {prepare_index_name(IndexName), [IndexValue]}.
 
--spec prepare_index_name(mg_core_storage:index_name()) ->
-    riak_index_name().
+-spec prepare_index_name(mg_core_storage:index_name()) -> riak_index_name().
 prepare_index_name({binary, Name}) ->
     {binary_index, erlang:binary_to_list(Name)};
 prepare_index_name({integer, Name}) ->
@@ -394,20 +431,17 @@ prepare_index_name({integer, Name}) ->
 
 %%
 
--spec get_option(atom(), options()) ->
-    _.
+-spec get_option(atom(), options()) -> _.
 get_option(Key, Options) ->
     maps:get(Key, Options, default_option(Key)).
 
--spec handle_riak_response(ok | {ok, T} | {error, _Reason}) ->
-    T | no_return().
+-spec handle_riak_response(ok | {ok, T} | {error, _Reason}) -> T | no_return().
 handle_riak_response(ok) ->
     ok;
 handle_riak_response(V) ->
     handle_riak_response_(V).
 
--spec handle_riak_response_({ok, T} | {error, _Reason}) ->
-    T | no_return().
+-spec handle_riak_response_({ok, T} | {error, _Reason}) -> T | no_return().
 handle_riak_response_({ok, Value}) ->
     Value;
 handle_riak_response_({error, Reason}) ->
@@ -419,23 +453,21 @@ handle_riak_response_({error, Reason}) ->
 %% https://github.com/basho/riak-erlang-client/blob/develop/src/riakc_pb_socket.erl#L1526
 %% Почитать про NRW и прочую магию можно тут http://basho.com/posts/technical/riaks-config-behaviors-part-2/
 %%
--spec default_option(atom()) ->
-    _.
+-spec default_option(atom()) -> _.
 default_option(resolve_timeout) -> 5000;
 default_option(connect_timeout) -> 5000;
 default_option(request_timeout) -> 10000;
 default_option(index_query_timeout) -> 10000;
 default_option(r_options) -> [{r, quorum}, {pr, quorum}];
 default_option(w_options) -> [{w, quorum}, {pw, quorum}, {dw, quorum}];
-default_option(d_options) -> []. % ?
+% ?
+default_option(d_options) -> [].
 
--spec get_riak_addr(options()) ->
-    inet:ip_address().
-get_riak_addr(Options=#{host := Host}) ->
+-spec get_riak_addr(options()) -> inet:ip_address().
+get_riak_addr(Options = #{host := Host}) ->
     lists_random(get_addrs_by_host(Host, get_option(resolve_timeout, Options))).
 
--spec lists_random(list(T)) ->
-    T.
+-spec lists_random(list(T)) -> T.
 lists_random(List) ->
     lists:nth(rand:uniform(length(List)), List).
 
@@ -461,8 +493,7 @@ get_addrs_by_host(Host, Timeout) ->
 
 %% pool helpers
 
--spec make_pool_config(options()) ->
-    [{atom(), term()}].
+-spec make_pool_config(options()) -> [{atom(), term()}].
 make_pool_config(Options) ->
     Name = pool_name(Options),
     PoolOptions = maps:get(pool_options, Options),
@@ -497,8 +528,7 @@ make_pool_config(Options) ->
     ),
     DefaultConfig ++ Config.
 
--spec take_client(options()) ->
-    client_ref().
+-spec take_client(options()) -> client_ref().
 take_client(Options) ->
     Timeout = ?TAKE_CLIENT_TIMEOUT,
     case pooler:take_member(pool_name(Options), {Timeout, ms}) of
@@ -508,17 +538,14 @@ take_client(Options) ->
             erlang:throw({transient, {storage_unavailable, no_pool_members}})
     end.
 
--spec return_client(options(), client_ref(), ok | fail) ->
-    ok.
+-spec return_client(options(), client_ref(), ok | fail) -> ok.
 return_client(Options, ClientRef, Status) ->
     pooler:return_member(pool_name(Options), ClientRef, Status).
 
--spec pool_name(options()) ->
-    atom().
+-spec pool_name(options()) -> atom().
 pool_name(#{name := Name}) ->
     term_to_atom(Name).
 
--spec term_to_atom(term()) ->
-    atom().
+-spec term_to_atom(term()) -> atom().
 term_to_atom(Term) ->
     erlang:binary_to_atom(base64:encode(erlang:term_to_binary(Term)), latin1).

@@ -65,15 +65,13 @@
 %% tests descriptions
 %%
 
--spec all() ->
-    [test_name() | {group, group_name()}].
+-spec all() -> [test_name() | {group, group_name()}].
 all() ->
     [
         {group, all}
     ].
 
--spec groups() ->
-    [group()].
+-spec groups() -> [group()].
 groups() ->
     [
         {all, [parallel], [
@@ -89,39 +87,33 @@ groups() ->
             sharing_respects_shares,
             sharing_respects_zero_shares,
             share_can_be_changed
-       ]}
+        ]}
     ].
 
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     C.
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(_C) ->
     ok.
 
--spec init_per_group(group_name(), config()) ->
-    config().
+-spec init_per_group(group_name(), config()) -> config().
 init_per_group(_Name, C) ->
     C.
 
--spec end_per_group(group_name(), config()) ->
-    ok.
+-spec end_per_group(group_name(), config()) -> ok.
 end_per_group(_Name, _C) ->
     ok.
 
--spec init_per_test(test_name(), config()) ->
-    config().
+-spec init_per_test(test_name(), config()) -> config().
 init_per_test(_Name, C) ->
     C.
 
--spec end_per_test(test_name(), config()) ->
-    ok.
+-spec end_per_test(test_name(), config()) -> ok.
 end_per_test(_Name, _C) ->
     ok.
 
@@ -313,18 +305,15 @@ share_can_be_changed(_C) ->
 
 %% Internals
 
--spec repeat(term(), non_neg_integer()) ->
-    [term()].
+-spec repeat(term(), non_neg_integer()) -> [term()].
 repeat(Element, Count) ->
     [Element || _ <- lists:seq(1, Count)].
 
--spec create_clients(non_neg_integer()) ->
-    [client()].
+-spec create_clients(non_neg_integer()) -> [client()].
 create_clients(Number) ->
     create_clients(Number, repeat(1, Number)).
 
--spec create_clients(non_neg_integer(), [mg_core_quota:share()]) ->
-    [client()].
+-spec create_clients(non_neg_integer(), [mg_core_quota:share()]) -> [client()].
 create_clients(Number, Shares) ->
     [
         #client{
@@ -336,26 +325,22 @@ create_clients(Number, Shares) ->
         || {N, S} <- lists:zip(lists:seq(1, Number), Shares)
     ].
 
--spec reserve([client()], quota()) ->
-    {[client()], quota()}.
+-spec reserve([client()], quota()) -> {[client()], quota()}.
 reserve(Clients, Quota) ->
     {NewClients, NewQuota} = lists:foldl(fun do_reserve/2, {[], Quota}, Clients),
     {lists:reverse(NewClients), NewQuota}.
 
--spec do_reserve(client(), Acc) -> Acc when
-    Acc :: {[client()], quota()}.
+-spec do_reserve(client(), Acc) -> Acc when Acc :: {[client()], quota()}.
 do_reserve(Client, {Acc, Quota}) ->
     #client{options = Options, usage = Usage, expectation = Exp} = Client,
     {ok, Reserved, NewQuota} = mg_core_quota:reserve(Options, Usage, Exp, Quota),
     {[Client#client{reserved = Reserved} | Acc], NewQuota}.
 
--spec loop([client()], quota()) ->
-    {[client()], quota()}.
+-spec loop([client()], quota()) -> {[client()], quota()}.
 loop(Clients, Quota) ->
     loop(Clients, Quota, 5).
 
--spec loop([client()], quota(), non_neg_integer()) ->
-    {[client()], quota()}.
+-spec loop([client()], quota(), non_neg_integer()) -> {[client()], quota()}.
 loop(Clients, Quota, 0) ->
     {Clients, Quota};
 loop(Clients0, Quota0, N) when N > 0 ->
@@ -363,31 +348,26 @@ loop(Clients0, Quota0, N) when N > 0 ->
     {ok, Quota2} = mg_core_quota:recalculate_targets(Quota1),
     loop(Clients1, Quota2, N - 1).
 
--spec get_reserve([client()]) ->
-    [resource()].
+-spec get_reserve([client()]) -> [resource()].
 get_reserve(Clients) ->
     [C#client.reserved || C <- Clients].
 
--spec get_expectation([client()]) ->
-    [resource()].
+-spec get_expectation([client()]) -> [resource()].
 get_expectation(Clients) ->
     [C#client.expectation || C <- Clients].
 
--spec set_expectation([client()], [resource()]) ->
-    [client()].
+-spec set_expectation([client()], [resource()]) -> [client()].
 set_expectation(Clients, Expecations) ->
     [C#client{expectation = E} || {C, E} <- lists:zip(Clients, Expecations)].
 
--spec set_share([client()], [mg_core_quota:share()]) ->
-    [client()].
+-spec set_share([client()], [mg_core_quota:share()]) -> [client()].
 set_share(Clients, Shares) ->
     [
         C#client{options = O#{share => S}}
         || {#client{options = O} = C, S} <- lists:zip(Clients, Shares)
     ].
 
--spec validate_quota_contract([client()], Limit :: mg_core_quota:resource()) ->
-    ok.
+-spec validate_quota_contract([client()], Limit :: mg_core_quota:resource()) -> ok.
 validate_quota_contract(Clients, Limit) ->
     true = lists:sum(get_reserve(Clients)) =< Limit,
     TotalUsage = [C#client.usage || C <- Clients],

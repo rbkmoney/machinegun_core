@@ -77,18 +77,16 @@
 %% API
 %%
 
--spec child_spec(options(), _ChildID) ->
-    supervisor:child_spec().
+-spec child_spec(options(), _ChildID) -> supervisor:child_spec().
 child_spec(Options, ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options]},
-        restart  => permanent,
+        id => ChildID,
+        start => {?MODULE, start_link, [Options]},
+        restart => permanent,
         shutdown => 5000
     }.
 
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(options()) -> mg_core_utils:gen_start_ret().
 start_link(#{name := Name} = Options) ->
     gen_server:start_link(self_reg_name(Name), ?MODULE, Options, []).
 
@@ -101,8 +99,7 @@ reserve(ClientOptions, Usage, Expectation, Name) ->
 
 %% gen_server callbacks
 
--spec init(options()) ->
-    mg_core_utils:gen_server_init_ret(state()).
+-spec init(options()) -> mg_core_utils:gen_server_init_ret(state()).
 init(Options) ->
     #{limit := Limit} = Options,
     Interval = maps:get(update_interval, Options, ?DEFAULT_UPDATE_INTERVAL),
@@ -119,20 +116,23 @@ init(Options) ->
     mg_core_utils:gen_server_handle_call_ret(state()).
 handle_call({reserve, ClientOptions, Usage, Expectation}, {Pid, _Tag}, State0) ->
     State1 = ensure_is_registered(ClientOptions, Pid, State0),
-    {ok, NewReserved, NewQuota} = mg_core_quota:reserve(ClientOptions, Usage, Expectation, State1#state.quota),
+    {ok, NewReserved, NewQuota} = mg_core_quota:reserve(
+        ClientOptions,
+        Usage,
+        Expectation,
+        State1#state.quota
+    ),
     {reply, NewReserved, State1#state{quota = NewQuota}};
 handle_call(Call, From, State) ->
     ok = logger:error("unexpected gen_server call received: ~p from ~p", [Call, From]),
     {noreply, State}.
 
--spec handle_cast(Cast :: any(), state()) ->
-    mg_core_utils:gen_server_handle_cast_ret(state()).
+-spec handle_cast(Cast :: any(), state()) -> mg_core_utils:gen_server_handle_cast_ret(state()).
 handle_cast(Cast, State) ->
     ok = logger:error("unexpected gen_server cast received: ~p", [Cast]),
     {noreply, State}.
 
--spec handle_info(Info :: any(), state()) ->
-    mg_core_utils:gen_server_handle_info_ret(state()).
+-spec handle_info(Info :: any(), state()) -> mg_core_utils:gen_server_handle_info_ret(state()).
 handle_info(?UPDATE_MESSAGE, State) ->
     {ok, NewQuota} = mg_core_quota:recalculate_targets(State#state.quota),
     {noreply, restart_timer(?UPDATE_MESSAGE, State#state{quota = NewQuota})};
@@ -147,8 +147,7 @@ handle_info(Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec terminate(Reason :: any(), state()) ->
-    ok.
+-spec terminate(Reason :: any(), state()) -> ok.
 terminate(_Reason, _State) ->
     ok.
 
@@ -156,13 +155,11 @@ terminate(_Reason, _State) ->
 
 % Client monitoring
 
--spec ensure_is_registered(client_options(), pid(), state()) ->
-    state().
+-spec ensure_is_registered(client_options(), pid(), state()) -> state().
 ensure_is_registered(#{client_id := ClientID}, Pid, #state{clients = Clients} = State) ->
     do_ensure_is_registered(maps:get(ClientID, Clients, undefined), ClientID, Pid, State).
 
--spec do_ensure_is_registered(client() | undefined, client_id(), pid(), state()) ->
-    state().
+-spec do_ensure_is_registered(client() | undefined, client_id(), pid(), state()) -> state().
 do_ensure_is_registered(undefined, ID, Pid, State) ->
     #state{clients = Clients, client_monitors = Monitors} = State,
     Monitor = erlang:monitor(process, Pid),
@@ -174,8 +171,7 @@ do_ensure_is_registered(undefined, ID, Pid, State) ->
 do_ensure_is_registered(#client{pid = ClientPid}, _ID, Pid, State) when ClientPid =:= Pid ->
     State.
 
--spec forget_about_client(monitor(), state()) ->
-    state().
+-spec forget_about_client(monitor(), state()) -> state().
 forget_about_client(Monitor, State) ->
     #state{clients = AllClients, client_monitors = Monitors, quota = Quota} = State,
     case maps:find(Monitor, Monitors) of
@@ -191,18 +187,15 @@ forget_about_client(Monitor, State) ->
 
 % Worker registration
 
--spec self_ref(name()) ->
-    mg_core_utils:gen_ref().
+-spec self_ref(name()) -> mg_core_utils:gen_ref().
 self_ref(ID) ->
     {via, gproc, {n, l, wrap_id(ID)}}.
 
--spec self_reg_name(name()) ->
-    mg_core_utils:gen_reg_name().
+-spec self_reg_name(name()) -> mg_core_utils:gen_reg_name().
 self_reg_name(ID) ->
     {via, gproc, {n, l, wrap_id(ID)}}.
 
--spec wrap_id(name()) ->
-    term().
+-spec wrap_id(name()) -> term().
 wrap_id(ID) ->
     {?MODULE, ID}.
 

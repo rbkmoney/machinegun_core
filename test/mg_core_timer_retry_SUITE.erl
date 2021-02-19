@@ -18,12 +18,12 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% tests descriptions
--export([all           /0]).
--export([groups        /0]).
+-export([all/0]).
+-export([groups/0]).
 -export([init_per_group/2]).
--export([end_per_group /2]).
+-export([end_per_group/2]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
 -export([transient_fail/1]).
@@ -41,50 +41,44 @@
 %%
 %% tests descriptions
 %%
--type test_name () :: atom().
--type group     () :: {Name :: atom(), Opts :: list(), [test_name()]}.
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type group() :: {Name :: atom(), Opts :: list(), [test_name()]}.
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()] | {group, atom()}.
+-spec all() -> [test_name()] | {group, atom()}.
 all() ->
     [
-       {group, all}
+        {group, all}
     ].
 
--spec groups() ->
-    [group()].
+-spec groups() -> [group()].
 groups() ->
     [
-       {all, [parallel, shuffle], [
-           transient_fail,
-           permanent_fail
-       ]}
+        {all, [parallel, shuffle], [
+            transient_fail,
+            permanent_fail
+        ]}
     ].
 
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
--spec init_per_group(GroupName :: atom(), config()) ->
-    config().
+-spec init_per_group(GroupName :: atom(), config()) -> config().
 init_per_group(_GroupName, C) ->
     C.
 
--spec end_per_group(GroupName :: atom(), config()) ->
-    ok.
+-spec end_per_group(GroupName :: atom(), config()) -> ok.
 end_per_group(_GroupName, C) ->
     C.
 
@@ -93,8 +87,7 @@ end_per_group(_GroupName, C) ->
 %%
 -define(req_ctx, <<"req_ctx">>).
 
--spec transient_fail(config()) ->
-    _.
+-spec transient_fail(config()) -> _.
 transient_fail(_C) ->
     BinTestName = genlib:to_binary(transient_fail),
     NS = BinTestName,
@@ -103,19 +96,30 @@ transient_fail(_C) ->
     Pid = start_automaton(Options),
 
     ok = mg_core_machine:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
-    0  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, {set_mode, <<"failing">>}, ?req_ctx, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:call(
+        Options,
+        ID,
+        {set_mode, <<"failing">>},
+        ?req_ctx,
+        mg_core_deadline:default()
+    ),
     ok = timer:sleep(3000),
-    0  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, {set_mode, <<"counting">>}, ?req_ctx, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:call(
+        Options,
+        ID,
+        {set_mode, <<"counting">>},
+        ?req_ctx,
+        mg_core_deadline:default()
+    ),
     ok = timer:sleep(3000),
-    I  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    I = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
     true = I > 0,
 
     ok = stop_automaton(Pid).
 
--spec permanent_fail(config()) ->
-    _.
+-spec permanent_fail(config()) -> _.
 permanent_fail(_C) ->
     BinTestName = genlib:to_binary(permanent_fail),
     NS = BinTestName,
@@ -124,26 +128,39 @@ permanent_fail(_C) ->
     Pid = start_automaton(Options),
 
     ok = mg_core_machine:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
-    0  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, {set_mode, <<"failing">>}, ?req_ctx, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:call(
+        Options,
+        ID,
+        {set_mode, <<"failing">>},
+        ?req_ctx,
+        mg_core_deadline:default()
+    ),
     ok = timer:sleep(4000),
-    {logic, machine_failed} = (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+    {logic, machine_failed} =
+        (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
 
     ok = stop_automaton(Pid).
 
 %%
 %% processor
 %%
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
+-spec pool_child_spec(_Options, atom()) -> supervisor:child_spec().
 pool_child_spec(_Options, Name) ->
     #{
-        id    => Name,
+        id => Name,
         start => {?MODULE, start, []}
     }.
 
--spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
-    mg_core_machine:processor_result() | no_return().
+-spec process_machine(
+    _Options,
+    mg_core:id(),
+    mg_core_machine:processor_impact(),
+    _,
+    _,
+    _,
+    mg_core_machine:machine_state()
+) -> mg_core_machine:processor_result() | no_return().
 process_machine(_, _, {init, Mode}, _, ?req_ctx, _, null) ->
     {{reply, ok}, build_timer(), [Mode, 0]};
 process_machine(_, _, {call, get}, _, ?req_ctx, _, [_Mode, Counter] = State) ->
@@ -160,53 +177,47 @@ process_machine(_, _, timeout, _, ?req_ctx, _, [<<"failing">>, _Counter]) ->
 %%
 %% utils
 %%
--spec start()->
-    ignore.
+-spec start() -> ignore.
 start() ->
     ignore.
 
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_machine:options()) -> pid().
 start_automaton(Options) ->
     mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
 
--spec stop_automaton(pid()) ->
-    ok.
+-spec stop_automaton(pid()) -> ok.
 stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options(mg_core:ns(), mg_core_retry:policy()) ->
-    mg_core_machine:options().
+-spec automaton_options(mg_core:ns(), mg_core_retry:policy()) -> mg_core_machine:options().
 automaton_options(NS, RetryPolicy) ->
     Scheduler = #{
         min_scan_delay => 1000,
-        target_cutoff  => 15
+        target_cutoff => 15
     },
     #{
         namespace => NS,
         processor => ?MODULE,
-        storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{
+        storage => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
+        worker => #{
             registry => mg_core_procreg_gproc
         },
-        pulse     => ?MODULE,
-        retries   => #{
-            timers         => RetryPolicy
+        pulse => ?MODULE,
+        retries => #{
+            timers => RetryPolicy
         },
         schedulers => #{
-            timers         => Scheduler,
+            timers => Scheduler,
             timers_retries => Scheduler,
-            overseer       => Scheduler
+            overseer => Scheduler
         }
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).
 
--spec build_timer() ->
-    mg_core_machine:processor_flow_action().
+-spec build_timer() -> mg_core_machine:processor_flow_action().
 build_timer() ->
     {wait, genlib_time:unow() + 1, ?req_ctx, 5000}.

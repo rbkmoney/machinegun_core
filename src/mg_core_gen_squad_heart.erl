@@ -35,9 +35,9 @@
 
 -type payload() ::
     #{
-        vsn     := 1,
-        msg     := message(),
-        from    := pid(),
+        vsn := 1,
+        msg := message(),
+        from := pid(),
         members := [pid()]
     }.
 
@@ -46,7 +46,7 @@
 -type pulse() :: mg_core_gen_squad_pulse:handler().
 -type opts() :: #{
     heartbeat => mg_core_gen_squad:heartbeat_opts(),
-    pulse     => pulse()
+    pulse => pulse()
 }.
 
 -export_type([message/0]).
@@ -57,69 +57,62 @@
 
 %%
 
--spec start_link(_Feedback, opts()) ->
-    {ok, pid()}.
+-spec start_link(_Feedback, opts()) -> {ok, pid()}.
 start_link(Feedback, Opts) ->
     gen_server:start_link(?MODULE, mk_state(self(), Feedback, Opts), []).
 
--spec update_members([pid()], pid()) ->
-    ok.
+-spec update_members([pid()], pid()) -> ok.
 update_members(Members, HeartPid) ->
     gen_server:cast(HeartPid, {members, Members}).
 
 %%
 
--spec broadcast(message(), pid(), [pid()], [pid()], _Ctx, pulse() | undefined) ->
-    ok.
+-spec broadcast(message(), pid(), [pid()], [pid()], _Ctx, pulse() | undefined) -> ok.
 broadcast(Message, Self, Members, Recepients, Ctx, Pulse) ->
     Payload = mk_payload(Message, Self, Members),
-    Sender = fun (Pid) -> gen_server:cast(Pid, {'$squad', Payload}) end,
+    Sender = fun(Pid) -> gen_server:cast(Pid, {'$squad', Payload}) end,
     _ = lists:foreach(Sender, Recepients),
     _ = beat({{broadcast, Payload}, {sent, Recepients, Ctx}}, Pulse),
     ok.
 
--spec mk_payload(message(), _Self :: pid(), _Members :: [pid()]) ->
-    payload().
+-spec mk_payload(message(), _Self :: pid(), _Members :: [pid()]) -> payload().
 mk_payload(Message, Self, Members) ->
     #{
-        vsn     => 1,
-        msg     => Message,
-        from    => Self,
+        vsn => 1,
+        msg => Message,
+        from => Self,
         members => Members
     }.
 
 %%
 
 -record(st, {
-    self     :: pid(),
+    self :: pid(),
     feedback :: _,
-    monitor  :: reference() | undefined,
-    members  :: [pid()],
-    opts     :: opts(),
-    timer    :: reference() | undefined
+    monitor :: reference() | undefined,
+    members :: [pid()],
+    opts :: opts(),
+    timer :: reference() | undefined
 }).
 
 -type st() :: #st{}.
 
--spec mk_state(pid(), _Feedback, opts()) ->
-    st().
+-spec mk_state(pid(), _Feedback, opts()) -> st().
 mk_state(Self, Feedback, Opts) ->
     #st{
-        self     = Self,
+        self = Self,
         feedback = Feedback,
-        members  = [],
-        opts     = Opts
+        members = [],
+        opts = Opts
     }.
 
--spec init(st()) ->
-    {ok, st()}.
+-spec init(st()) -> {ok, st()}.
 init(St) ->
     {ok, monitor_self(defer_heartbeat(St))}.
 
 -type from() :: {pid(), _}.
 
--spec handle_call(_Call, from(), st()) ->
-    {noreply, st()}.
+-spec handle_call(_Call, from(), st()) -> {noreply, st()}.
 handle_call(Call, From, St) ->
     _ = beat({unexpected, {{call, From}, Call}}, St),
     {noreply, St}.
@@ -127,8 +120,7 @@ handle_call(Call, From, St) ->
 -type cast() ::
     {members, [pid()]}.
 
--spec handle_cast(cast(), st()) ->
-    {noreply, st()}.
+-spec handle_cast(cast(), st()) -> {noreply, st()}.
 handle_cast({members, Members}, St = #st{}) ->
     {noreply, St#st{members = Members}};
 handle_cast(Cast, St) ->
@@ -136,11 +128,10 @@ handle_cast(Cast, St) ->
     {noreply, St}.
 
 -type info() ::
-    {timeout, reference(), heartbeat} |
-    {'DOWN', reference(), process, pid(), _Reason}.
+    {timeout, reference(), heartbeat}
+    | {'DOWN', reference(), process, pid(), _Reason}.
 
--spec handle_info(info(), st()) ->
-    {noreply, st()}.
+-spec handle_info(info(), st()) -> {noreply, st()}.
 handle_info({timeout, TRef, heartbeat = Msg}, St) ->
     _ = beat({{timer, TRef}, {fired, Msg}}, St),
     {noreply, defer_heartbeat(handle_heartbeat(TRef, St))};
@@ -152,8 +143,7 @@ handle_info(Info, St) ->
 
 %%
 
--spec defer_heartbeat(st()) ->
-    st().
+-spec defer_heartbeat(st()) -> st().
 defer_heartbeat(St = #st{timer = undefined, opts = #{heartbeat := HeartbeatOpts}}) ->
     Msg = heartbeat,
     Timeout = maps:get(broadcast_interval, HeartbeatOpts),
@@ -161,24 +151,21 @@ defer_heartbeat(St = #st{timer = undefined, opts = #{heartbeat := HeartbeatOpts}
     _ = beat({{timer, TRef}, {started, Timeout, Msg}}, St),
     St#st{timer = TRef}.
 
--spec handle_heartbeat(reference(), st()) ->
-    st().
+-spec handle_heartbeat(reference(), st()) -> st().
 handle_heartbeat(TRef, St = #st{timer = TRef, self = Self, members = Members, opts = Opts}) ->
     Pulse = maps:get(pulse, Opts, undefined),
     ok = broadcast(howdy, Self, Members, Members, heartbeat, Pulse),
     ok = gen_server:cast(Self, St#st.feedback),
     St#st{timer = undefined}.
 
--spec monitor_self(st()) ->
-    st().
+-spec monitor_self(st()) -> st().
 monitor_self(St = #st{self = Self}) ->
     MRef = erlang:monitor(process, Self),
     St#st{monitor = MRef}.
 
 %%
 
--spec beat(mg_core_gen_squad_pulse:beat(), st() | opts() | pulse() | undefined) ->
-    _.
+-spec beat(mg_core_gen_squad_pulse:beat(), st() | opts() | pulse() | undefined) -> _.
 beat(Beat, #st{opts = Opts}) ->
     beat(Beat, Opts);
 beat(Beat, Opts = #{}) ->

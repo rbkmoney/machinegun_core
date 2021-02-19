@@ -36,39 +36,37 @@
 %%
 %% internal API
 %%
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(options()) -> mg_core_utils:gen_start_ret().
 start_link(Options) ->
     gen_server:start_link(reg_name(get_name(Options)), ?MODULE, Options, []).
 
 %%
 %% mg_core_storage callbacks
 %%
--type context      () :: {pos_integer(), non_neg_integer()} | undefined.
--type options      () :: undefined | #{
-    name                  := name(),
-    pulse                 := mg_core_pulse:handler(),
-    existing_storage_name => name(),
-    random_transient_fail => float()
-}.
--type continuation () :: binary() | undefined.
--type name         () :: mg_core_storage:name().
+-type context() :: {pos_integer(), non_neg_integer()} | undefined.
+-type options() ::
+    undefined
+    | #{
+        name := name(),
+        pulse := mg_core_pulse:handler(),
+        existing_storage_name => name(),
+        random_transient_fail => float()
+    }.
+-type continuation() :: binary() | undefined.
+-type name() :: mg_core_storage:name().
 
-
--spec child_spec(options(), atom()) ->
-    supervisor:child_spec() | undefined.
+-spec child_spec(options(), atom()) -> supervisor:child_spec() | undefined.
 child_spec(#{existing_storage_name := _}, _ChildID) ->
     undefined;
 child_spec(Options, ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options]},
-        restart  => permanent,
+        id => ChildID,
+        start => {?MODULE, start_link, [Options]},
+        restart => permanent,
         shutdown => 5000
     }.
 
--spec do_request(options(), mg_core_storage:request()) ->
-    mg_core_storage:response().
+-spec do_request(options(), mg_core_storage:request()) -> mg_core_storage:response().
 do_request(Options, Req) ->
     random_fail(Options, fun() ->
         RealName = get_name(Options),
@@ -85,23 +83,21 @@ get_name(#{name := Name}) ->
 %% gen_server callbacks
 %%
 -type state() :: #{
-    options     => options(),
-    values      => #{mg_core_storage:key() => {context(), mg_core_storage:value()}},
-    indexes     => #{mg_core_storage:index_name() => index()}
+    options => options(),
+    values => #{mg_core_storage:key() => {context(), mg_core_storage:value()}},
+    indexes => #{mg_core_storage:index_name() => index()}
 }.
 -type index() :: [{mg_core_storage:index_value(), mg_core_storage:key()}].
--type search_result() :: [{mg_core_storage:index_value(), mg_core_storage:key()}] | [mg_core_storage:key()].
+-type search_result() ::
+    [{mg_core_storage:index_value(), mg_core_storage:key()}] | [mg_core_storage:key()].
 
--spec init(options()) ->
-    mg_core_utils:gen_server_init_ret(state()).
+-spec init(options()) -> mg_core_utils:gen_server_init_ret(state()).
 init(Options) ->
-    {ok,
-        #{
-            options   => Options,
-            values    => #{},
-            indexes   => #{}
-        }
-    }.
+    {ok, #{
+        options => Options,
+        values => #{},
+        indexes => #{}
+    }}.
 
 -spec handle_call(_Call, mg_core_utils:gen_server_from(), state()) ->
     mg_core_utils:gen_server_handle_call_ret(state()) | no_return().
@@ -117,7 +113,6 @@ handle_call({search, Query}, _From, State) ->
 handle_call({delete, Key, Context}, _From, State) ->
     NewState = do_delete(Key, Context, State),
     {reply, ok, NewState};
-
 %% этот сторадж создан больше для тестирования,
 %% поэто если в этот сторадж пришли странные запросы,
 %% то лучше сразу падать
@@ -125,34 +120,28 @@ handle_call(Call, From, State) ->
     _ = exit({'unexpected call received', Call, From}),
     {noreply, State}.
 
--spec handle_cast(_Cast, state()) ->
-    no_return().
+-spec handle_cast(_Cast, state()) -> no_return().
 handle_cast(Cast, State) ->
     _ = erlang:exit({'unexpected cast received', Cast}),
     {noreply, State}.
 
--spec handle_info(_Info, state()) ->
-    no_return().
+-spec handle_info(_Info, state()) -> no_return().
 handle_info(Info, State) ->
     _ = erlang:exit({'unexpected info received', Info}),
     {noreply, State}.
 
--spec code_change(_, state(), _) ->
-    mg_core_utils:gen_server_code_change_ret(state()).
+-spec code_change(_, state(), _) -> mg_core_utils:gen_server_code_change_ret(state()).
 code_change(_, State, _) ->
     {ok, State}.
 
--spec terminate(_Reason, state()) ->
-    ok.
+-spec terminate(_Reason, state()) -> ok.
 terminate(_, _) ->
     ok.
-
 
 %%
 %% local
 %%
--spec do_get(mg_core_storage:key(), state()) ->
-    {context(), mg_core_storage:value()} | undefined.
+-spec do_get(mg_core_storage:key(), state()) -> {context(), mg_core_storage:value()} | undefined.
 do_get(Key, #{values := Values}) ->
     case maps:get(Key, Values, undefined) of
         undefined ->
@@ -177,8 +166,7 @@ do_search({IndexName, QueryValue, IndexLimit, Cont}, State = #{indexes := Indexe
     Res = find_continuation(do_search_index(maps:get(IndexName, Indexes, []), QueryValue), Cont),
     {split_search_result(Res, IndexLimit), State}.
 
--spec find_continuation(search_result(), continuation()) ->
-    search_result().
+-spec find_continuation(search_result(), continuation()) -> search_result().
 find_continuation(Result, undefined) ->
     Result;
 find_continuation(Result, Cont) ->
@@ -198,28 +186,41 @@ split_search_result(SearchResult, IndexLimit) ->
             {SearchResultFinal, generate_continuation(SearchResultFinal)}
     end.
 
--spec generate_continuation(search_result()) ->
-    continuation().
+-spec generate_continuation(search_result()) -> continuation().
 generate_continuation(Result) ->
     term_to_binary(lists:last(Result)).
 
--spec do_put(mg_core_storage:key(), context(), mg_core_storage:value(), [mg_core_storage:index_update()], state()) ->
-    {context(), state()}.
+-spec do_put(
+    mg_core_storage:key(),
+    context(),
+    mg_core_storage:value(),
+    [mg_core_storage:index_update()],
+    state()
+) -> {context(), state()}.
 do_put(Key, NewContext, Value, IndexesUpdates, State0 = #{values := Values}) ->
     % по текущей схеме (пишет всегда только один процесс) конфликтов никогда не должно быть
-    R = case {do_get(Key, State0), NewContext} of
-            {_                  , undefined} -> {put, new_context()};
-            {undefined          , _        } -> {error, {not_found, Key}};
-            {{CurrentContext, _}, _        } ->
+    R =
+        case {do_get(Key, State0), NewContext} of
+            {_, undefined} ->
+                {put, new_context()};
+            {undefined, _} ->
+                {error, {not_found, Key}};
+            {{CurrentContext, _}, _} ->
                 case compare_context(CurrentContext, NewContext) of
-                    replace  -> {put, next_context(NewContext)};
-                    ignore   -> {nop, CurrentContext};
+                    replace -> {put, next_context(NewContext)};
+                    ignore -> {nop, CurrentContext};
                     conflict -> {error, {conflict, NewContext, CurrentContext}}
                 end
         end,
     case R of
         {put, NextContext} ->
-            State1 = State0#{values := maps:put(Key, {NextContext, mg_core_storage:opaque_to_binary(Value)}, Values)},
+            State1 = State0#{
+                values := maps:put(
+                    Key,
+                    {NextContext, mg_core_storage:opaque_to_binary(Value)},
+                    Values
+                )
+            },
             {NextContext, do_update_indexes(IndexesUpdates, Key, do_cleanup_indexes(Key, State1))};
         {nop, NextContext} ->
             {NextContext, State0};
@@ -227,8 +228,7 @@ do_put(Key, NewContext, Value, IndexesUpdates, State0 = #{values := Values}) ->
             exit(Error)
     end.
 
--spec do_delete(mg_core_storage:key(), context(), state()) ->
-    state().
+-spec do_delete(mg_core_storage:key(), context(), state()) -> state().
 do_delete(Key, Context, State = #{values := Values}) ->
     case do_get(Key, State) of
         {Context, _} ->
@@ -242,37 +242,33 @@ do_delete(Key, Context, State = #{values := Values}) ->
     end.
 
 %% это аналог vclock'а для тестов
--spec new_context() ->
-    context().
+-spec new_context() -> context().
 new_context() ->
-    {rand:uniform(1000000), 0}. % число от балды, просто много :)
+    % число от балды, просто много :)
+    {rand:uniform(1000000), 0}.
 
--spec next_context(context() | undefined) ->
-    context().
+-spec next_context(context() | undefined) -> context().
 next_context({Seed, Counter}) ->
     {Seed, Counter + 1}.
 
--spec compare_context(context(), context()) ->
-    replace | ignore | conflict.
+-spec compare_context(context(), context()) -> replace | ignore | conflict.
 compare_context({SeedA, CounterA}, {SeedB, CounterB}) when SeedA =:= SeedB ->
     case CounterA =< CounterB of
-        true  -> replace;
+        true -> replace;
         false -> ignore
     end;
 compare_context({_, _}, {_, _}) ->
     conflict.
 
-
 %%
 %% index
 %%
--spec do_search_index(index(), mg_core_storage:index_query_value()) ->
-    search_result().
+-spec do_search_index(index(), mg_core_storage:index_query_value()) -> search_result().
 do_search_index(Index, QueryValue) ->
     lists:foldr(
         fun({IndexValue, Key}, ResultAcc) ->
             case does_value_satisfy_query(QueryValue, IndexValue) of
-                true  -> [index_search_result(IndexValue, Key, QueryValue) | ResultAcc];
+                true -> [index_search_result(IndexValue, Key, QueryValue) | ResultAcc];
                 false -> ResultAcc
             end
         end,
@@ -280,21 +276,25 @@ do_search_index(Index, QueryValue) ->
         Index
     ).
 
--spec index_search_result(mg_core_storage:index_value(), mg_core_storage:key(), mg_core_storage:index_query_value()) ->
-    {mg_core_storage:index_value(), mg_core_storage:key()} | mg_core_storage:key().
+-spec index_search_result(
+    mg_core_storage:index_value(),
+    mg_core_storage:key(),
+    mg_core_storage:index_query_value()
+) -> {mg_core_storage:index_value(), mg_core_storage:key()} | mg_core_storage:key().
 index_search_result(IndexValue, Key, {_, _}) ->
     {IndexValue, Key};
 index_search_result(_, Key, _) ->
     Key.
 
 %% Очень тупое название, но ничего лучше в голову не пришло.
--spec does_value_satisfy_query(mg_core_storage:index_query_value(), mg_core_storage:index_value()) ->
-    boolean().
+-spec does_value_satisfy_query(
+    mg_core_storage:index_query_value(),
+    mg_core_storage:index_value()
+) -> boolean().
 does_value_satisfy_query({From, To}, Value) ->
     From =< Value andalso Value =< To;
 does_value_satisfy_query(Equal, Value) ->
     Equal =:= Value.
-
 
 -spec do_update_indexes([mg_core_storage:index_update()], mg_core_storage:key(), state()) ->
     state().
@@ -307,22 +307,19 @@ do_update_indexes(IndexesUpdates, Key, State) ->
         IndexesUpdates
     ).
 
--spec do_update_index(mg_core_storage:index_update(), mg_core_storage:key(), state()) ->
-    state().
-do_update_index(IndexUpdate={IndexName, IndexValue}, Key, State = #{indexes := Indexes}) ->
+-spec do_update_index(mg_core_storage:index_update(), mg_core_storage:key(), state()) -> state().
+do_update_index(IndexUpdate = {IndexName, IndexValue}, Key, State = #{indexes := Indexes}) ->
     ok = check_index_update(IndexUpdate),
-    Index    = maps:get(IndexName, Indexes, []),
+    Index = maps:get(IndexName, Indexes, []),
     NewIndex = lists:sort([{IndexValue, Key} | Index]),
     State#{indexes := maps:put(IndexName, NewIndex, Indexes)}.
 
--spec check_index_update(mg_core_storage:index_update()) ->
-    ok | no_return().
-check_index_update({{binary , Name}, Value}) when is_binary(Name) andalso is_binary (Value) -> ok;
+-spec check_index_update(mg_core_storage:index_update()) -> ok | no_return().
+check_index_update({{binary, Name}, Value}) when is_binary(Name) andalso is_binary(Value) -> ok;
 check_index_update({{integer, Name}, Value}) when is_binary(Name) andalso is_integer(Value) -> ok.
 
--spec do_cleanup_indexes(mg_core_storage:key(), state()) ->
-    state().
-do_cleanup_indexes(Key, State=#{indexes := Indexes}) ->
+-spec do_cleanup_indexes(mg_core_storage:key(), state()) -> state().
+do_cleanup_indexes(Key, State = #{indexes := Indexes}) ->
     NewIndexes =
         maps:map(
             fun(_, Index) ->
@@ -332,8 +329,7 @@ do_cleanup_indexes(Key, State=#{indexes := Indexes}) ->
         ),
     State#{indexes := NewIndexes}.
 
--spec do_cleanup_index(mg_core_storage:key(), index()) ->
-    index().
+-spec do_cleanup_index(mg_core_storage:key(), index()) -> index().
 do_cleanup_index(Key, Index) ->
     lists:foldr(
         fun
@@ -346,8 +342,7 @@ do_cleanup_index(Key, Index) ->
         Index
     ).
 
--spec random_fail(options(), fun(() -> T)) -> T | no_return() when
-    T :: any().
+-spec random_fail(options(), fun(() -> T)) -> T | no_return() when T :: any().
 random_fail(#{random_transient_fail := Border}, Fun) ->
     Prob = rand:uniform(),
     ok = try_fail(Prob, (Border / 2), {transient, {storage_unavailable, random_fail}}),
@@ -364,28 +359,24 @@ try_fail(_Prob, _Border, _Error) ->
     ok.
 
 %% utils
--spec start_from_elem(any(), list()) ->
-    list().
-start_from_elem(_, [])  ->
+-spec start_from_elem(any(), list()) -> list().
+start_from_elem(_, []) ->
     [];
-start_from_elem(Item, [Item|Tail]) ->
+start_from_elem(Item, [Item | Tail]) ->
     Tail;
-start_from_elem(Item, [_|Tail]) ->
+start_from_elem(Item, [_ | Tail]) ->
     start_from_elem(Item, Tail).
 
 %% Registry utils
 
--spec ref(name()) ->
-    mg_core_utils:gen_ref().
+-spec ref(name()) -> mg_core_utils:gen_ref().
 ref(Name) ->
     {via, gproc, gproc_key(Name)}.
 
--spec reg_name(name()) ->
-    mg_core_utils:gen_reg_name().
+-spec reg_name(name()) -> mg_core_utils:gen_reg_name().
 reg_name(Name) ->
     {via, gproc, gproc_key(Name)}.
 
--spec gproc_key(name()) ->
-    gproc:key().
+-spec gproc_key(name()) -> gproc:key().
 gproc_key(Name) ->
     {n, l, {?MODULE, Name}}.

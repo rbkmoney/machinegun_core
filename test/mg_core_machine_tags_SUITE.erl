@@ -18,17 +18,17 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% tests descriptions
--export([all           /0]).
--export([groups        /0]).
+-export([all/0]).
+-export([groups/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
--export([tag           /1]).
+-export([tag/1]).
 -export([idempotent_tag/1]).
--export([double_tag    /1]).
--export([replace       /1]).
--export([resolve       /1]).
+-export([double_tag/1]).
+-export([replace/1]).
+-export([resolve/1]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -37,18 +37,16 @@
 %% tests descriptions
 %%
 -type group_name() :: atom().
--type test_name () :: atom().
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()].
+-spec all() -> [test_name()].
 all() ->
     [
         {group, main}
     ].
 
--spec groups() ->
-    [{group_name(), list(_), test_name()}].
+-spec groups() -> [{group_name(), list(_), test_name()}].
 groups() ->
     [
         {main, [sequence], [
@@ -63,61 +61,64 @@ groups() ->
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_storage, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     Pid = start_automaton(automaton_options()),
     true = erlang:unlink(Pid),
-    [{apps, Apps}, {pid, Pid}| C].
+    [{apps, Apps}, {pid, Pid} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     ok = proc_lib:stop(?config(pid, C)),
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
-
 %%
 %% tests
 %%
--define(ID       , <<"tagged_id">>).
--define(OTHER_ID , <<"other_id" >>).
--define(TAG      , <<"tag"      >>).
+-define(ID, <<"tagged_id">>).
+-define(OTHER_ID, <<"other_id">>).
+-define(TAG, <<"tag">>).
 
--spec tag(config()) ->
-    _.
+-spec tag(config()) -> _.
 tag(_C) ->
     ok = mg_core_machine_tags:add(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
 
--spec idempotent_tag(config()) ->
-    _.
+-spec idempotent_tag(config()) -> _.
 idempotent_tag(C) ->
     tag(C).
 
--spec double_tag(config()) ->
-    _.
+-spec double_tag(config()) -> _.
 double_tag(_C) ->
     {already_exists, ?ID} =
-        mg_core_machine_tags:add(automaton_options(), ?TAG, ?OTHER_ID, null, mg_core_deadline:default()).
+        mg_core_machine_tags:add(
+            automaton_options(),
+            ?TAG,
+            ?OTHER_ID,
+            null,
+            mg_core_deadline:default()
+        ).
 
--spec replace(config()) ->
-    _.
+-spec replace(config()) -> _.
 replace(_C) ->
-    ok = mg_core_machine_tags:replace(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
+    ok = mg_core_machine_tags:replace(
+        automaton_options(),
+        ?TAG,
+        ?ID,
+        null,
+        mg_core_deadline:default()
+    ).
 
--spec resolve(config()) ->
-    _.
+-spec resolve(config()) -> _.
 resolve(_C) ->
     ?ID = mg_core_machine_tags:resolve(automaton_options(), ?TAG).
 
 %%
 %% utils
 %%
--spec start_automaton(mg_core_machine_tags:options()) ->
-    pid().
+-spec start_automaton(mg_core_machine_tags:options()) -> pid().
 start_automaton(Options) ->
     mg_core_utils:throw_if_error(
         mg_core_utils_supervisor_wrapper:start_link(
@@ -126,18 +127,16 @@ start_automaton(Options) ->
         )
     ).
 
--spec automaton_options() ->
-    mg_core_machine_tags:options().
+-spec automaton_options() -> mg_core_machine_tags:options().
 automaton_options() ->
     #{
         namespace => <<"test_tags">>,
-        storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
-        pulse     => ?MODULE,
-        retries   => #{}
+        storage => mg_core_storage_memory,
+        worker => #{registry => mg_core_procreg_gproc},
+        pulse => ?MODULE,
+        retries => #{}
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).

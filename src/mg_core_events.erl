@@ -20,13 +20,13 @@
 -module(mg_core_events).
 
 %% API
--export_type([id           /0]).
--export_type([body         /0]).
--export_type([content      /0]).
--export_type([event        /0]).
--export_type([event        /1]).
+-export_type([id/0]).
+-export_type([body/0]).
+-export_type([content/0]).
+-export_type([event/0]).
+-export_type([event/1]).
 -export_type([history_range/0]).
--export_type([events_range /0]).
+-export_type([events_range/0]).
 
 -export_type([format_version/0]).
 
@@ -40,45 +40,46 @@
 %% packer to opaque and kv
 -export([events_range_to_opaque/1]).
 -export([opaque_to_events_range/1]).
--export([event_id_to_key       /1]).
--export([key_to_event_id       /1]).
--export([event_to_kv           /1]).
--export([kv_to_event           /1]).
--export([events_to_kvs         /1]).
--export([kvs_to_events         /1]).
--export([event_to_kv           /2]).
--export([kv_to_event           /2]).
--export([events_to_kvs         /2]).
--export([kvs_to_events         /2]).
--export([event_to_opaque       /1]).
--export([opaque_to_event       /1]).
--export([event_to_opaque       /2]).
--export([opaque_to_event       /2]).
--export([events_to_opaques     /1]).
--export([opaques_to_events     /1]).
--export([content_to_opaque     /1]).
--export([opaque_to_content     /1]).
+-export([event_id_to_key/1]).
+-export([key_to_event_id/1]).
+-export([event_to_kv/1]).
+-export([kv_to_event/1]).
+-export([events_to_kvs/1]).
+-export([kvs_to_events/1]).
+-export([event_to_kv/2]).
+-export([kv_to_event/2]).
+-export([events_to_kvs/2]).
+-export([kvs_to_events/2]).
+-export([event_to_opaque/1]).
+-export([opaque_to_event/1]).
+-export([event_to_opaque/2]).
+-export([opaque_to_event/2]).
+-export([events_to_opaques/1]).
+-export([opaques_to_events/1]).
+-export([content_to_opaque/1]).
+-export([opaque_to_content/1]).
 -export([history_range_to_opaque/1]).
 -export([opaque_to_history_range/1]).
--export([maybe_to_opaque        /2]).
--export([maybe_from_opaque      /2]).
--export([identity               /1]).
--export([add_machine_id        /2]).
--export([remove_machine_id     /2]).
+-export([maybe_to_opaque/2]).
+-export([maybe_from_opaque/2]).
+-export([identity/1]).
+-export([add_machine_id/2]).
+-export([remove_machine_id/2]).
 
 %%
 %% API
 %%
--type id   () :: pos_integer().
--type body () :: content().
+-type id() :: pos_integer().
+-type body() :: content().
 -type event() :: event(body()).
 -type event(T) :: #{
-    id         => id(),
-    created_at => integer(),  % in nanosecond
-    body       => T
+    id => id(),
+    % in nanosecond
+    created_at => integer(),
+    body => T
 }.
 
--type content()  :: {metadata(), mg_core_storage:opaque()}.
+-type content() :: {metadata(), mg_core_storage:opaque()}.
 -type metadata() :: #{
     % Версия формата данных
     %
@@ -90,7 +91,8 @@
 -type format_version() :: integer().
 
 -type direction() :: forward | backward.
--type history_range() :: {After::id() | undefined, Limit::non_neg_integer() | undefined, direction()}.
+-type history_range() ::
+    {After :: id() | undefined, Limit :: non_neg_integer() | undefined, direction()}.
 
 %% не очень удобно, что получилось 2 формата range'а
 %% надо подумать, как это исправить
@@ -99,37 +101,33 @@
 %%
 %% events ranges intersection
 %%
--spec intersect_range(events_range(), history_range()) ->
-    events_range().
+-spec intersect_range(events_range(), history_range()) -> events_range().
 intersect_range(R0, {Ef, N, Direction}) ->
     R1 = orient_range(R0, Direction),
     R2 = chop_range(R1, Ef),
     R3 = limit_range(R2, N),
     R3.
 
--spec orient_range(events_range(), direction()) ->
-    events_range().
+-spec orient_range(events_range(), direction()) -> events_range().
 orient_range(R, forward) ->
     mg_core_dirange:align(R, mg_core_dirange:forward(1, 1));
 orient_range(R, backward) ->
     mg_core_dirange:align(R, mg_core_dirange:backward(1, 1)).
 
--spec chop_range(events_range(), _From :: id() | undefined) ->
-    events_range().
+-spec chop_range(events_range(), _From :: id() | undefined) -> events_range().
 chop_range(R0, undefined) ->
     R0;
 chop_range(R0, Ef) when is_integer(Ef) ->
-    {_, R1} = mg_core_dirange:dissect(R0, Ef), R1.
+    {_, R1} = mg_core_dirange:dissect(R0, Ef),
+    R1.
 
--spec limit_range(events_range(), undefined | non_neg_integer()) ->
-    events_range().
+-spec limit_range(events_range(), undefined | non_neg_integer()) -> events_range().
 limit_range(R, undefined) ->
     R;
 limit_range(R, N) ->
     mg_core_dirange:limit(R, N).
 
--spec slice_events([event()], events_range()) ->
-    [event()].
+-spec slice_events([event()], events_range()) -> [event()].
 slice_events(Events = [#{id := First} | _], Range) ->
     D = mg_core_dirange:direction(Range),
     case mg_core_dirange:bounds(Range) of
@@ -146,14 +144,12 @@ slice_events([], _) ->
 %%
 %% events generation
 %%
--spec generate_events_with_range([body()], events_range()) ->
-    {[event()], events_range()}.
+-spec generate_events_with_range([body()], events_range()) -> {[event()], events_range()}.
 generate_events_with_range(EventsBodies, EventsRange) ->
     {Events, NewLastEventID} = generate_events(EventsBodies, mg_core_dirange:to(EventsRange)),
     {Events, update_events_range(EventsRange, NewLastEventID)}.
 
--spec generate_events([body()], id() | undefined) ->
-    {[event()], id() | undefined}.
+-spec generate_events([body()], id() | undefined) -> {[event()], id() | undefined}.
 generate_events(EventsBodies, LastID) ->
     lists:mapfoldl(
         fun generate_event/2,
@@ -161,28 +157,24 @@ generate_events(EventsBodies, LastID) ->
         EventsBodies
     ).
 
--spec generate_event(body(), id() | undefined) ->
-    {event(), id()}.
+-spec generate_event(body(), id() | undefined) -> {event(), id()}.
 generate_event(EventBody, LastID) ->
     ID = get_next_event_id(LastID),
-    Event =
-        #{
-            id         => ID,
-            % We use `nanosecond` for backward compatibility
-            created_at => os:system_time(nanosecond),
-            body       => EventBody
-        },
+    Event = #{
+        id => ID,
+        % We use `nanosecond` for backward compatibility
+        created_at => os:system_time(nanosecond),
+        body => EventBody
+    },
     {Event, ID}.
 
--spec get_next_event_id(undefined | id()) ->
-    id().
+-spec get_next_event_id(undefined | id()) -> id().
 get_next_event_id(undefined) ->
     1;
 get_next_event_id(N) ->
     N + 1.
 
--spec update_events_range(events_range(), id() | undefined) ->
-    events_range().
+-spec update_events_range(events_range(), id() | undefined) -> events_range().
 update_events_range(Range, undefined) ->
     Range;
 update_events_range(Range, NewLastEventID) ->
@@ -194,44 +186,36 @@ update_events_range(Range, NewLastEventID) ->
 %%
 %% events range
 % TODO version
--spec events_range_to_opaque(events_range()) ->
-    mg_core_storage:opaque().
+-spec events_range_to_opaque(events_range()) -> mg_core_storage:opaque().
 events_range_to_opaque(Range) ->
     mg_core_dirange:to_opaque(Range).
 
--spec opaque_to_events_range(mg_core_storage:opaque()) ->
-    events_range().
+-spec opaque_to_events_range(mg_core_storage:opaque()) -> events_range().
 opaque_to_events_range(Opaque) ->
     mg_core_dirange:from_opaque(Opaque).
 
 %% event
--spec event_id_to_key(id()) ->
-    mg_core_storage:key().
+-spec event_id_to_key(id()) -> mg_core_storage:key().
 event_id_to_key(EventID) ->
     erlang:integer_to_binary(EventID).
 
--spec key_to_event_id(mg_core_storage:key()) ->
-    id().
+-spec key_to_event_id(mg_core_storage:key()) -> id().
 key_to_event_id(Key) ->
     erlang:binary_to_integer(Key).
 
--spec event_to_kv(event()) ->
-    mg_core_storage:kv().
+-spec event_to_kv(event()) -> mg_core_storage:kv().
 event_to_kv(Event) ->
     event_to_kv(Event, fun body_to_opaque/2).
 
--spec kv_to_event(mg_core_storage:kv()) ->
-    event().
+-spec kv_to_event(mg_core_storage:kv()) -> event().
 kv_to_event(Event) ->
     kv_to_event(Event, fun opaque_to_body/2).
 
--spec events_to_kvs([event()]) ->
-    [mg_core_storage:kv()].
+-spec events_to_kvs([event()]) -> [mg_core_storage:kv()].
 events_to_kvs(Events) ->
     [mg_core_events:event_to_kv(Event) || Event <- Events].
 
--spec kvs_to_events([mg_core_storage:kv()]) ->
-    [event()].
+-spec kvs_to_events([mg_core_storage:kv()]) -> [event()].
 kvs_to_events(Kvs) ->
     [mg_core_events:kv_to_event(Attr) || Attr <- Kvs].
 
@@ -251,9 +235,9 @@ kv_to_event({EventID, [Vsn, Date, OpaqueBody]}, OpaqueToBody) when
     Vsn =:= 2
 ->
     #{
-        id         => key_to_event_id(EventID),
+        id => key_to_event_id(EventID),
         created_at => Date,
-        body       => OpaqueToBody(Vsn, OpaqueBody)
+        body => OpaqueToBody(Vsn, OpaqueBody)
     }.
 
 -spec events_to_kvs([event(T)], fun((Vsn :: 1..2, T) -> mg_core_storage:opaque())) ->
@@ -266,13 +250,11 @@ events_to_kvs(Events, BodyToOpaque) ->
 kvs_to_events(Kvs, OpaqueToBody) ->
     [mg_core_events:kv_to_event(Attr, OpaqueToBody) || Attr <- Kvs].
 
--spec event_to_opaque(event()) ->
-    mg_core_storage:opaque().
+-spec event_to_opaque(event()) -> mg_core_storage:opaque().
 event_to_opaque(Event) ->
     event_to_opaque(Event, fun body_to_opaque/2).
 
--spec opaque_to_event(mg_core_storage:opaque()) ->
-    event().
+-spec opaque_to_event(mg_core_storage:opaque()) -> event().
 opaque_to_event(Event) ->
     opaque_to_event(Event, fun opaque_to_body/2).
 
@@ -289,80 +271,69 @@ opaque_to_event([Vsn, EventID, Date, Body], BodyUnpacker) when
     Vsn =:= 2
 ->
     #{
-        id         => EventID,
+        id => EventID,
         created_at => Date,
-        body       => BodyUnpacker(Vsn, Body)
+        body => BodyUnpacker(Vsn, Body)
     }.
 
--spec events_to_opaques([event()]) ->
-    [mg_core_storage:opaque()].
+-spec events_to_opaques([event()]) -> [mg_core_storage:opaque()].
 events_to_opaques(Events) ->
     [event_to_opaque(Event) || Event <- Events].
 
--spec opaques_to_events([mg_core_storage:opaque()]) ->
-    [event()].
+-spec opaques_to_events([mg_core_storage:opaque()]) -> [event()].
 opaques_to_events(Opaques) ->
     [opaque_to_event(Opaque) || Opaque <- Opaques].
 
--spec body_to_opaque(2, body()) ->
-    mg_core_storage:opaque().
+-spec body_to_opaque(2, body()) -> mg_core_storage:opaque().
 body_to_opaque(2, Body) ->
     content_to_opaque(Body).
 
--spec opaque_to_body(1..2, mg_core_storage:opaque()) ->
-    body().
+-spec opaque_to_body(1..2, mg_core_storage:opaque()) -> body().
 opaque_to_body(2, Body) ->
     opaque_to_content(Body);
 opaque_to_body(1, Body) ->
     {
-        #{}, % пустая метадата
+        % пустая метадата
+        #{},
         Body
     }.
 
--spec content_to_opaque(content()) ->
-    mg_core_storage:opaque().
+-spec content_to_opaque(content()) -> mg_core_storage:opaque().
 content_to_opaque({Metadata, Body}) ->
     [1, metadata_to_opaque(Metadata), Body].
 
--spec opaque_to_content(mg_core_storage:opaque()) ->
-    content().
+-spec opaque_to_content(mg_core_storage:opaque()) -> content().
 opaque_to_content([1, Metadata, Body]) ->
     {opaque_to_metadata(Metadata), Body}.
 
--spec metadata_to_opaque(metadata()) ->
-    mg_core_storage:opaque().
+-spec metadata_to_opaque(metadata()) -> mg_core_storage:opaque().
 metadata_to_opaque(Metadata) ->
     maps:fold(
-        fun
-            (format_version, Vsn, Acc) -> [<<"fv">>, Vsn] ++ Acc
-        end,
+        fun(format_version, Vsn, Acc) -> [<<"fv">>, Vsn] ++ Acc end,
         [],
         Metadata
     ).
 
--spec opaque_to_metadata(mg_core_storage:opaque()) ->
-    metadata().
+-spec opaque_to_metadata(mg_core_storage:opaque()) -> metadata().
 opaque_to_metadata(Metadata) ->
     opaque_to_metadata(Metadata, #{}).
 
--spec opaque_to_metadata([mg_core_storage:opaque()], metadata()) ->
-    metadata().
+-spec opaque_to_metadata([mg_core_storage:opaque()], metadata()) -> metadata().
 opaque_to_metadata([<<"fv">>, Vsn | Rest], Metadata) ->
     opaque_to_metadata(Rest, Metadata#{format_version => Vsn});
 opaque_to_metadata([], Metadata) ->
     Metadata.
 
--spec history_range_to_opaque(history_range()) ->
-    mg_core_storage:opaque().
+-spec history_range_to_opaque(history_range()) -> mg_core_storage:opaque().
 history_range_to_opaque({After, Limit, Direction}) ->
-    [1,
+    [
+        1,
         maybe_to_opaque(After, fun identity/1),
         maybe_to_opaque(Limit, fun identity/1),
         direction_to_opaque(Direction)
     ].
 
--spec opaque_to_history_range(mg_core_storage:opaque()) ->
-    history_range().
+-spec opaque_to_history_range(mg_core_storage:opaque()) -> history_range().
 opaque_to_history_range([1, After, Limit, Direction]) ->
     {
         maybe_from_opaque(After, fun identity/1),
@@ -370,35 +341,29 @@ opaque_to_history_range([1, After, Limit, Direction]) ->
         opaque_to_direction(Direction)
     }.
 
--spec direction_to_opaque(direction()) ->
-    mg_core_storage:opaque().
-direction_to_opaque(forward ) -> 1;
+-spec direction_to_opaque(direction()) -> mg_core_storage:opaque().
+direction_to_opaque(forward) -> 1;
 direction_to_opaque(backward) -> 2.
 
--spec opaque_to_direction(mg_core_storage:opaque()) ->
-    direction().
-opaque_to_direction(1) -> forward ;
+-spec opaque_to_direction(mg_core_storage:opaque()) -> direction().
+opaque_to_direction(1) -> forward;
 opaque_to_direction(2) -> backward.
 
--spec maybe_to_opaque(undefined | T0, fun((T0) -> T1)) ->
-    T1.
+-spec maybe_to_opaque(undefined | T0, fun((T0) -> T1)) -> T1.
 maybe_to_opaque(undefined, _) ->
     null;
 maybe_to_opaque(T0, ToT1) ->
     ToT1(T0).
 
--spec maybe_from_opaque(null | T0, fun((T0) -> T1)) ->
-    T1.
+-spec maybe_from_opaque(null | T0, fun((T0) -> T1)) -> T1.
 maybe_from_opaque(null, _) ->
     undefined;
 maybe_from_opaque(T0, ToT1) ->
     ToT1(T0).
 
--spec identity(T) ->
-    T.
+-spec identity(T) -> T.
 identity(V) ->
     V.
-
 
 -spec add_machine_id
     (mg_core:id(), T) -> T when T :: mg_core_storage:kv();

@@ -32,24 +32,25 @@
 -export_type([options/0]).
 -export_type([queue_limit/0]).
 
--export([child_spec    /2]).
--export([start_link    /1]).
--export([call          /5]).
+-export([child_spec/2]).
+-export([start_link/1]).
+-export([call/5]).
 -export([get_call_queue/2]).
--export([brutal_kill   /2]).
--export([is_alive      /2]).
+-export([brutal_kill/2]).
+-export([is_alive/2]).
 
 %% Types
 %% FIXME: some of these are listed as optional (=>)
 %%        whereas later in the code they are rigidly matched on (:=)
 %%        fixed for name and pulse
 -type options() :: #{
-    name                    := name(),
-    pulse                   := mg_core_pulse:handler(),
-    registry                => mg_core_procreg:options(),
+    name := name(),
+    pulse := mg_core_pulse:handler(),
+    registry => mg_core_procreg:options(),
     message_queue_len_limit => queue_limit(),
-    worker_options          => mg_core_worker:options(), % all but `registry`
-    sidecar                 => mg_core_utils:mod_opts()
+    % all but `registry`
+    worker_options => mg_core_worker:options(),
+    sidecar => mg_core_utils:mod_opts()
 }.
 -type queue_limit() :: non_neg_integer().
 
@@ -68,18 +69,16 @@
 %% API
 %%
 
--spec child_spec(options(), atom()) ->
-    supervisor:child_spec().
+-spec child_spec(options(), atom()) -> supervisor:child_spec().
 child_spec(Options, ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options]},
-        restart  => permanent,
-        type     => supervisor
+        id => ChildID,
+        start => {?MODULE, start_link, [Options]},
+        restart => permanent,
+        type => supervisor
     }.
 
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(options()) -> mg_core_utils:gen_start_ret().
 start_link(Options) ->
     mg_core_utils_supervisor_wrapper:start_link(
         #{strategy => rest_for_one},
@@ -89,8 +88,7 @@ start_link(Options) ->
         ])
     ).
 
--spec manager_child_spec(options()) ->
-    supervisor:child_spec().
+-spec manager_child_spec(options()) -> supervisor:child_spec().
 manager_child_spec(Options) ->
     Args = [
         self_reg_name(Options),
@@ -98,21 +96,19 @@ manager_child_spec(Options) ->
         [mg_core_worker:child_spec(worker, worker_options(Options))]
     ],
     #{
-        id    => manager,
+        id => manager,
         start => {mg_core_utils_supervisor_wrapper, start_link, Args},
-        type  => supervisor
+        type => supervisor
     }.
 
--spec sidecar_child_spec(options()) ->
-    supervisor:child_spec() | undefined.
+-spec sidecar_child_spec(options()) -> supervisor:child_spec() | undefined.
 sidecar_child_spec(#{sidecar := Sidecar} = Options) ->
     mg_core_utils:apply_mod_opts(Sidecar, child_spec, [Options, sidecar]);
 sidecar_child_spec(#{}) ->
     undefined.
 
 % sync
--spec call(options(), id(), _Call, maybe(req_ctx()), deadline()) ->
-    _Reply | {error, _}.
+-spec call(options(), id(), _Call, maybe(req_ctx()), deadline()) -> _Reply | {error, _}.
 call(Options, ID, Call, ReqCtx, Deadline) ->
     case mg_core_deadline:is_reached(Deadline) of
         false ->
@@ -121,36 +117,45 @@ call(Options, ID, Call, ReqCtx, Deadline) ->
             {error, {transient, worker_call_deadline_reached}}
     end.
 
--spec call(options(), id(), _Call, maybe(req_ctx()), deadline(), boolean()) ->
-    _Reply | {error, _}.
+-spec call(options(), id(), _Call, maybe(req_ctx()), deadline(), boolean()) -> _Reply | {error, _}.
 call(Options, ID, Call, ReqCtx, Deadline, CanRetry) ->
     #{name := Name, pulse := Pulse} = Options,
-    try mg_core_worker:call(worker_options(Options), Name, ID, Call, ReqCtx, Deadline, Pulse) catch
+    try
+        mg_core_worker:call(worker_options(Options), Name, ID, Call, ReqCtx, Deadline, Pulse)
+    catch
         exit:Reason ->
             handle_worker_exit(Options, ID, Call, ReqCtx, Deadline, Reason, CanRetry)
     end.
 
--spec handle_worker_exit(options(), id(), _Call, maybe(req_ctx()), deadline(), _Reason, boolean()) ->
-    _Reply | {error, _}.
+-spec handle_worker_exit(
+    options(),
+    id(),
+    _Call,
+    maybe(req_ctx()),
+    deadline(),
+    _Reason,
+    boolean()
+) -> _Reply | {error, _}.
 handle_worker_exit(Options, ID, Call, ReqCtx, Deadline, Reason, CanRetry) ->
-    MaybeRetry = case CanRetry of
-        true ->
-            fun (_Details) -> start_and_retry_call(Options, ID, Call, ReqCtx, Deadline) end;
-        false ->
-            fun (Details) -> {error, {transient, Details}} end
-    end,
+    MaybeRetry =
+        case CanRetry of
+            true ->
+                fun(_Details) -> start_and_retry_call(Options, ID, Call, ReqCtx, Deadline) end;
+            false ->
+                fun(Details) -> {error, {transient, Details}} end
+        end,
     case Reason of
         % We have to take into account that `gen_server:call/2` wraps exception details in a
         % tuple with original call MFA attached.
         % > https://github.com/erlang/otp/blob/OTP-21.3/lib/stdlib/src/gen_server.erl#L215
-        noproc                 -> MaybeRetry(noproc);
-        {noproc    , _MFA}     -> MaybeRetry(noproc);
-        {normal    , _MFA}     -> MaybeRetry(normal);
-        {shutdown  , _MFA}     -> MaybeRetry(shutdown);
-        {timeout   , _MFA}     -> {error, Reason};
-        {killed    , _MFA}     -> {error, {timeout, killed}};
-        {transient , _Details} -> {error, Reason};
-        Unknown                -> {error, {unexpected_exit, Unknown}}
+        noproc -> MaybeRetry(noproc);
+        {noproc, _MFA} -> MaybeRetry(noproc);
+        {normal, _MFA} -> MaybeRetry(normal);
+        {shutdown, _MFA} -> MaybeRetry(shutdown);
+        {timeout, _MFA} -> {error, Reason};
+        {killed, _MFA} -> {error, {timeout, killed}};
+        {transient, _Details} -> {error, Reason};
+        Unknown -> {error, {unexpected_exit, Unknown}}
     end.
 
 -spec start_and_retry_call(options(), id(), _Call, maybe(req_ctx()), deadline()) ->
@@ -171,39 +176,36 @@ start_and_retry_call(Options, ID, Call, ReqCtx, Deadline) ->
             {error, Reason}
     end.
 
--spec get_call_queue(options(), id()) ->
-    [_Call].
+-spec get_call_queue(options(), id()) -> [_Call].
 get_call_queue(Options, ID) ->
     try
         mg_core_worker:get_call_queue(worker_options(Options), maps:get(name, Options), ID)
-    catch exit:noproc ->
-        []
+    catch
+        exit:noproc ->
+            []
     end.
 
--spec brutal_kill(options(), id()) ->
-    ok.
+-spec brutal_kill(options(), id()) -> ok.
 brutal_kill(Options, ID) ->
     try
         mg_core_worker:brutal_kill(worker_options(Options), maps:get(name, Options), ID)
-    catch exit:noproc ->
-        ok
+    catch
+        exit:noproc ->
+            ok
     end.
 
--spec is_alive(options(), id()) ->
-    boolean().
+-spec is_alive(options(), id()) -> boolean().
 is_alive(Options, ID) ->
     mg_core_worker:is_alive(worker_options(Options), maps:get(name, Options), ID).
 
--spec worker_options(options()) ->
-    mg_core_worker:options().
+-spec worker_options(options()) -> mg_core_worker:options().
 worker_options(#{worker_options := WorkerOptions, registry := Registry}) ->
     WorkerOptions#{registry => Registry}.
 
 %%
 %% local
 %%
--spec start_child(options(), id(), maybe(req_ctx())) ->
-    {ok, pid()} | {error, term()}.
+-spec start_child(options(), id(), maybe(req_ctx())) -> {ok, pid()} | {error, term()}.
 start_child(Options, ID, ReqCtx) ->
     SelfRef = self_ref(Options),
     #{name := Name, pulse := Pulse} = Options,
@@ -223,8 +225,7 @@ start_child(Options, ID, ReqCtx) ->
             {error, {transient, overload}}
     end.
 
--spec do_start_child(gen_ref(), name(), id(), maybe(req_ctx())) ->
-    {ok, pid()} | {error, term()}.
+-spec do_start_child(gen_ref(), name(), id(), maybe(req_ctx())) -> {ok, pid()} | {error, term()}.
 do_start_child(SelfRef, Name, ID, ReqCtx) ->
     try
         supervisor:start_child(SelfRef, [Name, ID, ReqCtx])
@@ -233,27 +234,22 @@ do_start_child(SelfRef, Name, ID, ReqCtx) ->
             {error, {timeout, Reason}}
     end.
 
--spec message_queue_len_limit(options()) ->
-    queue_limit().
+-spec message_queue_len_limit(options()) -> queue_limit().
 message_queue_len_limit(Options) ->
     maps:get(message_queue_len_limit, Options, ?default_message_queue_len_limit).
 
--spec self_ref(options()) ->
-    gen_ref().
+-spec self_ref(options()) -> gen_ref().
 self_ref(Options) ->
     {via, gproc, gproc_key(Options)}.
 
--spec self_reg_name(options()) ->
-    mg_core_utils:gen_reg_name().
+-spec self_reg_name(options()) -> mg_core_utils:gen_reg_name().
 self_reg_name(Options) ->
     {via, gproc, gproc_key(Options)}.
 
--spec gproc_key(options()) ->
-    gproc:key().
+-spec gproc_key(options()) -> gproc:key().
 gproc_key(Options) ->
     {n, l, wrap(maps:get(name, Options))}.
 
--spec wrap(_) ->
-    term().
+-spec wrap(_) -> term().
 wrap(V) ->
     {?MODULE, V}.

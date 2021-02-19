@@ -27,19 +27,18 @@
 
 -type retries_num() :: pos_integer() | infinity.
 -type policy() ::
-      {linear, retries_num() | {max_total_timeout, pos_integer()}, pos_integer()}
+    {linear, retries_num() | {max_total_timeout, pos_integer()}, pos_integer()}
     | {exponential, retries_num() | {max_total_timeout, pos_integer()}, number(), pos_integer()}
-    | {exponential, retries_num() | {max_total_timeout, pos_integer()}, number(), pos_integer(), timeout()}
+    | {exponential, retries_num() | {max_total_timeout, pos_integer()}, number(), pos_integer(),
+        timeout()}
     | {intervals, [pos_integer(), ...]}
-    | {timecap, timeout(), policy()}
-.
+    | {timecap, timeout(), policy()}.
 
 -type strategy() :: genlib_retry:strategy().
 
 %% API
 
--spec new_strategy(policy()) ->
-    strategy().
+-spec new_strategy(policy()) -> strategy().
 new_strategy({linear, Retries, Timeout}) ->
     genlib_retry:linear(Retries, Timeout);
 new_strategy({exponential, Retries, Factor, Timeout}) ->
@@ -69,10 +68,11 @@ new_strategy(PolicySpec, _InitialTimestamp, Attempt) ->
 skip_steps(Strategy, 0) ->
     Strategy;
 skip_steps(Strategy, N) when N > 0 ->
-    NewStrategy = case genlib_retry:next_step(Strategy) of
-        {wait, _Timeout, NextStrategy} ->
-            NextStrategy;
-        finish = NextStrategy ->
-            NextStrategy
-    end,
+    NewStrategy =
+        case genlib_retry:next_step(Strategy) of
+            {wait, _Timeout, NextStrategy} ->
+                NextStrategy;
+            finish = NextStrategy ->
+                NextStrategy
+        end,
     skip_steps(NewStrategy, N - 1).

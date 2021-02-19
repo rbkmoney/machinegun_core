@@ -18,7 +18,14 @@
 
 -export([add_events/6]).
 
--callback add_events(handler_options(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) -> ok.
+-callback add_events(
+    handler_options(),
+    mg_core:ns(),
+    mg_core:id(),
+    [event()],
+    req_ctx(),
+    deadline()
+) -> ok.
 
 %% Types
 
@@ -37,8 +44,7 @@
 
 %% API
 
--spec add_events(handler(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) ->
-    ok.
+-spec add_events(handler(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) -> ok.
 add_events(_Handler, _NS, _ID, [], _ReqCtx, _Deadline) ->
     ok;
 add_events(Handler, NS, ID, Events, ReqCtx, Deadline) ->

@@ -18,13 +18,14 @@
 
 -type id() :: any().
 -type payload() :: any().
--type target_time() :: genlib_time:ts(). % unix timestamp in seconds
+% unix timestamp in seconds
+-type target_time() :: genlib_time:ts().
 
 -type task(TaskID, TaskPayload) :: #{
-    id          := TaskID,
+    id := TaskID,
     target_time := target_time(),
-    machine_id  := mg_core:id(),
-    payload     => TaskPayload
+    machine_id := mg_core:id(),
+    payload => TaskPayload
 }.
 
 -type task() :: task(id(), payload()).
@@ -38,7 +39,6 @@
 
 %%
 
--spec current_time() ->
-    target_time().
+-spec current_time() -> target_time().
 current_time() ->
     genlib_time:unow().

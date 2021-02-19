@@ -18,19 +18,18 @@
 -include_lib("machinegun_core/include/pulse.hrl").
 
 %% API
--export_type([beat         /0]).
--export_type([handler      /0]).
+-export_type([beat/0]).
+-export_type([handler/0]).
 -export([handle_beat/2]).
 
--callback handle_beat(Options :: any(), beat()) ->
-    ok.
+-callback handle_beat(Options :: any(), beat()) -> ok.
 
 %%
 %% API
 %%
 -type beat() ::
     % Timer
-      #mg_core_timer_lifecycle_created{}
+    #mg_core_timer_lifecycle_created{}
     | #mg_core_timer_lifecycle_rescheduled{}
     | #mg_core_timer_lifecycle_rescheduling_error{}
     | #mg_core_timer_lifecycle_removed{}
@@ -75,8 +74,7 @@
 
 -type handler() :: mg_core_utils:mod_opts() | undefined.
 
--spec handle_beat(handler(), any()) ->
-    ok.
+-spec handle_beat(handler(), any()) -> ok.
 handle_beat(undefined, _Beat) ->
     ok;
 handle_beat(Handler, Beat) ->

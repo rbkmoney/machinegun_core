@@ -16,7 +16,6 @@
 
 -module(mg_core_queue_interrupted).
 
-
 -behaviour(mg_core_queue_scanner).
 -export([init/1]).
 -export([search_tasks/3]).
@@ -51,14 +50,14 @@
 -type task() :: mg_core_queue_task:task(task_id(), task_payload()).
 -type scan_delay() :: mg_core_queue_scanner:scan_delay().
 
--define(DEFAULT_PROCESSING_TIMEOUT, 60000).  % 1 minute
+% 1 minute
+-define(DEFAULT_PROCESSING_TIMEOUT, 60000).
 
 %%
 %% API
 %%
 
--spec init(options()) ->
-    {ok, state()}.
+-spec init(options()) -> {ok, state()}.
 init(_Options) ->
     {ok, #state{continuation = undefined}}.
 
@@ -74,8 +73,7 @@ search_tasks(Options, Limit, #state{continuation = Continuation} = State) ->
     NewState = State#state{continuation = NewContinuation},
     {{Delay, Tasks}, NewState}.
 
--spec execute_task(options(), task()) ->
-    ok.
+-spec execute_task(options(), task()) -> ok.
 execute_task(Options, #{machine_id := MachineID}) ->
     Timeout = maps:get(processing_timeout, Options, ?DEFAULT_PROCESSING_TIMEOUT),
     Deadline = mg_core_deadline:from_timeout(Timeout),
@@ -83,13 +81,11 @@ execute_task(Options, #{machine_id := MachineID}) ->
 
 %% Internals
 
--spec machine_options(options()) ->
-    mg_core_machine:options().
+-spec machine_options(options()) -> mg_core_machine:options().
 machine_options(#{machine := MachineOptions}) ->
     MachineOptions.
 
--spec get_delay(mg_core_storage:continuation(), options()) ->
-    scan_delay().
+-spec get_delay(mg_core_storage:continuation(), options()) -> scan_delay().
 get_delay(undefined, Options) ->
     maps:get(rescan_delay, Options, 10 * 60 * 1000);
 get_delay(_Other, Options) ->

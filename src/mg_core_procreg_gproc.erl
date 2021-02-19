@@ -31,18 +31,15 @@
 
 %%
 
--spec ref(options(), mg_core_procreg:name()) ->
-    mg_core_procreg:ref().
+-spec ref(options(), mg_core_procreg:name()) -> mg_core_procreg:ref().
 ref(_Options, Name) ->
     {via, gproc, {n, l, Name}}.
 
--spec reg_name(options(), mg_core_procreg:name()) ->
-    mg_core_procreg:reg_name().
+-spec reg_name(options(), mg_core_procreg:name()) -> mg_core_procreg:reg_name().
 reg_name(Options, Name) ->
     ref(Options, Name).
 
--spec select(options(), mg_core_procreg:name_pattern()) ->
-    [{mg_core_procreg:name(), pid()}].
+-spec select(options(), mg_core_procreg:name_pattern()) -> [{mg_core_procreg:name(), pid()}].
 select(_Options, NamePattern) ->
     MatchSpec = [{{{n, l, NamePattern}, '_', '_'}, [], ['$$']}],
     [{Name, Pid} || [{n, l, Name}, Pid, _] <- gproc:select(MatchSpec)].
@@ -52,7 +49,6 @@ select(_Options, NamePattern) ->
 start_link(_Options, RegName, Module, Args, Opts) ->
     gen_server:start_link(RegName, Module, Args, Opts).
 
--spec call(options(), mg_core_procreg:ref(), _Call, timeout()) ->
-    _Reply.
+-spec call(options(), mg_core_procreg:ref(), _Call, timeout()) -> _Reply.
 call(_Options, Ref, Call, Timeout) ->
     gen_server:call(Ref, Call, Timeout).

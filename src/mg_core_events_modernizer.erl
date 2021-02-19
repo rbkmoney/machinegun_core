@@ -26,15 +26,17 @@
 
 -type options() :: #{
     current_format_version := mg_core_events:format_version(),
-    handler                := mg_core_utils:mod_opts(handler_opts())
+    handler := mg_core_utils:mod_opts(handler_opts())
 }.
 
--type handler_opts()    :: term(). % handler specific
--type request_context() :: term(). % handler specific
+% handler specific
+-type handler_opts() :: term().
+% handler specific
+-type request_context() :: term().
 
 -type machine_event() :: #{
-    ns    => mg_core:ns(),
-    id    => mg_core:id(),
+    ns => mg_core:ns(),
+    id => mg_core:id(),
     event => mg_core_events:event()
 }.
 
@@ -45,17 +47,22 @@
 
 %%
 
--type ref()           :: mg_core_events_machine:ref().
+-type ref() :: mg_core_events_machine:ref().
 -type history_range() :: mg_core_events:history_range().
 
--spec modernize_machine(options(), mg_core_events_machine:options(), request_context(), ref(), history_range()) ->
-    ok.
+-spec modernize_machine(
+    options(),
+    mg_core_events_machine:options(),
+    request_context(),
+    ref(),
+    history_range()
+) -> ok.
 modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
     #{ns := NS, id := ID, history := History} =
         mg_core_events_machine:get_machine(EventsMachineOptions, Ref, HRange),
     OutdatedHistory = filter_outdated_history(Options, History),
     lists:foreach(
-        fun (Event) ->
+        fun(Event) ->
             ModernizedBody = call_handler(Options, ReqCtx, event_to_machine_event(NS, ID, Event)),
             case update_event(Event, ModernizedBody) of
                 Event ->
@@ -67,8 +74,7 @@ modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
         OutdatedHistory
     ).
 
--spec update_event(mg_core_events:event(), modernized_event_body()) ->
-    mg_core_events:event().
+-spec update_event(mg_core_events:event(), modernized_event_body()) -> mg_core_events:event().
 update_event(Event = #{body := Body}, ModernizedBody) ->
     case Versions = {get_format_version(Body), get_format_version(ModernizedBody)} of
         {undefined, _} ->
@@ -88,18 +94,15 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
             erlang:throw({logic, {invalid_modernized_version, Versions}})
     end.
 
--spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) ->
-    ok.
+-spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) -> ok.
 store_event(Options, ID, Event) ->
     mg_core_events_storage:store_event(Options, ID, Event).
 
--spec filter_outdated_history(options(), [mg_core_events:event()]) ->
-    [mg_core_events:event()].
+-spec filter_outdated_history(options(), [mg_core_events:event()]) -> [mg_core_events:event()].
 filter_outdated_history(Options, History) ->
-    lists:filter(fun (Event) -> is_outdated_event(Options, Event) end, History).
+    lists:filter(fun(Event) -> is_outdated_event(Options, Event) end, History).
 
--spec is_outdated_event(options(), mg_core_events:event()) ->
-    boolean().
+-spec is_outdated_event(options(), mg_core_events:event()) -> boolean().
 is_outdated_event(#{current_format_version := Current}, #{body := Body}) ->
     case get_format_version(Body) of
         undefined ->
@@ -109,18 +112,15 @@ is_outdated_event(#{current_format_version := Current}, #{body := Body}) ->
             Current > Version
     end.
 
--spec get_format_version(mg_core_events:content()) ->
-    mg_core_events:format_version() | undefined.
+-spec get_format_version(mg_core_events:content()) -> mg_core_events:format_version() | undefined.
 get_format_version({Metadata, _}) ->
     maps:get(format_version, Metadata, undefined).
 
--spec event_to_machine_event(mg_core:ns(), mg_core:id(), mg_core_events:event()) ->
-    machine_event().
+-spec event_to_machine_event(mg_core:ns(), mg_core:id(), mg_core_events:event()) -> machine_event().
 event_to_machine_event(NS, ID, Event) ->
     #{ns => NS, id => ID, event => Event}.
 
--spec call_handler(options(), request_context(), machine_event()) ->
-    modernized_event_body().
+-spec call_handler(options(), request_context(), machine_event()) -> modernized_event_body().
 call_handler(#{handler := Handler}, ReqCtx, MachineEvent) ->
     % TODO обработка ошибок?
     mg_core_utils:apply_mod_opts(Handler, modernize_event, [ReqCtx, MachineEvent]).

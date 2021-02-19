@@ -18,9 +18,9 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% tests descriptions
--export([all           /0]).
+-export([all/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
 -export([robust_handling/1]).
@@ -37,29 +37,26 @@
 %%
 %% tests descriptions
 %%
--type test_name () :: atom().
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()] | {group, atom()}.
+-spec all() -> [test_name()] | {group, atom()}.
 all() ->
     [
-       robust_handling
+        robust_handling
     ].
 
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
@@ -69,8 +66,7 @@ end_per_suite(C) ->
 -define(req_ctx, <<"req_ctx">>).
 
 %% Errors in event hadler don't affect machine
--spec robust_handling(config()) ->
-    _.
+-spec robust_handling(config()) -> _.
 robust_handling(_C) ->
     BinTestName = genlib:to_binary(robust_handling),
     NS = BinTestName,
@@ -87,16 +83,22 @@ robust_handling(_C) ->
 %%
 %% processor
 %%
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
+-spec pool_child_spec(_Options, atom()) -> supervisor:child_spec().
 pool_child_spec(_Options, Name) ->
     #{
-        id    => Name,
+        id => Name,
         start => {?MODULE, start, []}
     }.
 
--spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
-    mg_core_machine:processor_result() | no_return().
+-spec process_machine(
+    _Options,
+    mg_core:id(),
+    mg_core_machine:processor_impact(),
+    _,
+    _,
+    _,
+    mg_core_machine:machine_state()
+) -> mg_core_machine:processor_result() | no_return().
 process_machine(_, _, {init, _}, _, ?req_ctx, _, null) ->
     {{reply, ok}, build_timer(), []};
 process_machine(_, _, timeout, _, ?req_ctx, _, _State) ->
@@ -105,47 +107,41 @@ process_machine(_, _, timeout, _, ?req_ctx, _, _State) ->
 %%
 %% utils
 %%
--spec start()->
-    ignore.
+-spec start() -> ignore.
 start() ->
     ignore.
 
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_machine:options()) -> pid().
 start_automaton(Options) ->
     mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
 
--spec stop_automaton(pid()) ->
-    ok.
+-spec stop_automaton(pid()) -> ok.
 stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options(mg_core:ns()) ->
-    mg_core_machine:options().
+-spec automaton_options(mg_core:ns()) -> mg_core_machine:options().
 automaton_options(NS) ->
     #{
         namespace => NS,
         processor => ?MODULE,
-        storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{registry => mg_core_procreg_gproc},
-        pulse     => ?MODULE,
-        retries   => #{
-            timers         => {intervals, [1000, 1000, 1000, 1000, 1000]},
-            processor      => {intervals, [1]}
+        storage => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
+        worker => #{registry => mg_core_procreg_gproc},
+        pulse => ?MODULE,
+        retries => #{
+            timers => {intervals, [1000, 1000, 1000, 1000, 1000]},
+            processor => {intervals, [1]}
         },
         schedulers => #{
-            timers         => #{min_scan_delay => 1000},
+            timers => #{min_scan_delay => 1000},
             timers_retries => #{min_scan_delay => 1000}
         }
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, _Event) ->
     erlang:error(logging_oops).
 
--spec build_timer() ->
-    mg_core_machine:processor_flow_action().
+-spec build_timer() -> mg_core_machine:processor_flow_action().
 build_timer() ->
     {wait, genlib_time:unow() + 1, ?req_ctx, 5000}.

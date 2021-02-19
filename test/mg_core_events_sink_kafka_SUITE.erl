@@ -20,13 +20,13 @@
 -include_lib("kafka_protocol/include/kpro_public.hrl").
 
 %% tests descriptions
--export([all           /0]).
--export([groups        /0]).
+-export([all/0]).
+-export([groups/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
--export([add_events_test                   /1]).
+-export([add_events_test/1]).
 
 %% Pulse
 -export([handle_beat/2]).
@@ -41,18 +41,16 @@
 %% tests descriptions
 %%
 -type group_name() :: atom().
--type test_name () :: atom().
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()].
+-spec all() -> [test_name()].
 all() ->
     [
         {group, main}
     ].
 
--spec groups() ->
-    [{group_name(), list(_), test_name()}].
+-spec groups() -> [{group_name(), list(_), test_name()}].
 groups() ->
     [
         {main, [], [
@@ -63,8 +61,7 @@ groups() ->
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_events_sink_kafka, '_', '_'}, x),
@@ -79,12 +76,17 @@ init_per_suite(C) ->
         ]},
         {machinegun_core, []}
     ],
-    Apps = lists:flatten([genlib_app:start_application_with(App, AppConf) || {App, AppConf} <- AppSpecs]),
-    {Events, _} = mg_core_events:generate_events_with_range([{#{}, Body} || Body <- [1, 2, 3]], undefined),
-    [{apps, Apps}, {events, Events}| C].
+    Apps = lists:flatten([
+        genlib_app:start_application_with(App, AppConf)
+        || {App, AppConf} <- AppSpecs
+    ]),
+    {Events, _} = mg_core_events:generate_events_with_range(
+        [{#{}, Body} || Body <- [1, 2, 3]],
+        undefined
+    ),
+    [{apps, Apps}, {events, Events} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     [application:stop(App) || App <- lists:reverse(?config(apps, C))].
 
@@ -92,8 +94,7 @@ end_per_suite(C) ->
 %% tests
 %%
 
--spec add_events_test(config()) ->
-    _.
+-spec add_events_test(config()) -> _.
 add_events_test(C) ->
     ?assertEqual(ok, add_events(C)),
     ?assertEqual([], [{?SOURCE_NS, ?SOURCE_ID, E} || E <- ?config(events, C)] -- read_all_events()).
@@ -102,8 +103,7 @@ add_events_test(C) ->
 %% utils
 %%
 
--spec add_events(config()) ->
-    ok.
+-spec add_events(config()) -> ok.
 add_events(C) ->
     F = fun() ->
         mg_core_events_sink_kafka:add_events(
@@ -117,14 +117,14 @@ add_events(C) ->
     end,
     call_with_retry(F, mg_core_retry:new_strategy({linear, 10, 500})).
 
--spec read_all_events() ->
-    ok.
+-spec read_all_events() -> ok.
 read_all_events() ->
     {ok, PartitionsCount} = brod:get_partitions_count(?CLIENT, ?TOPIC),
     do_read_all(?BROKERS, ?TOPIC, PartitionsCount - 1, 0, []).
 
--spec do_read_all([brod:endpoint()], brod:topic(), brod:partition(), brod:offset(), [mg_core_event:event()]) ->
-    ok.
+-spec do_read_all([brod:endpoint()], brod:topic(), brod:partition(), brod:offset(), [
+    mg_core_event:event()
+]) -> ok.
 do_read_all(_Hosts, _Topic, Partition, _Offset, Result) when Partition < 0 ->
     lists:reverse(Result);
 do_read_all(Hosts, Topic, Partition, Offset, Result) ->
@@ -133,31 +133,29 @@ do_read_all(Hosts, Topic, Partition, Offset, Result) ->
             do_read_all(Hosts, Topic, Partition - 1, Offset, Result);
         {ok, {NewOffset, Records}} when NewOffset =/= Offset ->
             NewRecords = lists:reverse([
-                erlang:binary_to_term(Value) || #kafka_message{value = Value} <- Records
+                erlang:binary_to_term(Value)
+                || #kafka_message{value = Value} <- Records
             ]),
             do_read_all(Hosts, Topic, Partition, NewOffset, NewRecords ++ Result)
     end.
 
--spec event_sink_options() ->
-    mg_core_events_sink_machine:ns_options().
+-spec event_sink_options() -> mg_core_events_sink_machine:ns_options().
 event_sink_options() ->
     #{
-        name    => kafka,
-        client  => ?CLIENT,
-        topic   => ?TOPIC,
-        pulse   => ?MODULE,
+        name => kafka,
+        client => ?CLIENT,
+        topic => ?TOPIC,
+        pulse => ?MODULE,
         encoder => fun(NS, ID, Event) ->
             erlang:term_to_binary({NS, ID, Event})
         end
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).
 
--spec call_with_retry(fun(() -> Result), mg_core_retry:strategy()) ->
-    Result.
+-spec call_with_retry(fun(() -> Result), mg_core_retry:strategy()) -> Result.
 call_with_retry(Fun, Strategy) ->
     try
         Fun()

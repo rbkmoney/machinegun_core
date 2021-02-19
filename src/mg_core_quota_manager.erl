@@ -16,8 +16,8 @@
 
 -module(mg_core_quota_manager).
 
--export([child_spec    /2]).
--export([start_link    /1]).
+-export([child_spec/2]).
+-export([start_link/1]).
 
 %% Types
 -type options() :: #{quota_name() => quota_options()}.
@@ -32,18 +32,16 @@
 %% API
 %%
 
--spec child_spec(options(), _ChildID) ->
-    supervisor:child_spec().
+-spec child_spec(options(), _ChildID) -> supervisor:child_spec().
 child_spec(Options, ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [Options]},
-        restart  => permanent,
-        type     => supervisor
+        id => ChildID,
+        start => {?MODULE, start_link, [Options]},
+        restart => permanent,
+        type => supervisor
     }.
 
--spec start_link(options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(options()) -> mg_core_utils:gen_start_ret().
 start_link(Options) ->
     mg_core_utils_supervisor_wrapper:start_link(
         #{strategy => one_for_one},

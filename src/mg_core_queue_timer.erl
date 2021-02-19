@@ -56,53 +56,50 @@
 -type scan_delay() :: mg_core_queue_scanner:scan_delay().
 -type scan_limit() :: mg_core_queue_scanner:scan_limit().
 
--define(DEFAULT_PROCESSING_TIMEOUT, 60000).  % 1 minute
+% 1 minute
+-define(DEFAULT_PROCESSING_TIMEOUT, 60000).
 
 %%
 %% API
 %%
 
--spec init(options()) ->
-    {ok, state()}.
+-spec init(options()) -> {ok, state()}.
 init(_Options) ->
     {ok, #state{}}.
 
--spec build_task(mg_core:id(), target_time()) ->
-    task().
+-spec build_task(mg_core:id(), target_time()) -> task().
 build_task(ID, Timestamp) ->
     #{
-        id          => ID,
+        id => ID,
         target_time => Timestamp,
-        machine_id  => ID
+        machine_id => ID
     }.
 
--spec search_tasks(options(), scan_limit(), state()) ->
-    {{scan_delay(), [task()]}, state()}.
+-spec search_tasks(options(), scan_limit(), state()) -> {{scan_delay(), [task()]}, state()}.
 search_tasks(Options = #{timer_queue := TimerQueue}, Limit, State = #state{}) ->
     CurrentTs = mg_core_queue_task:current_time(),
     Lookahead = maps:get(lookahead, Options, 0),
     Query = {TimerQueue, 1, CurrentTs + Lookahead},
     {Timers, Continuation} = mg_core_machine:search(machine_options(Options), Query, Limit),
     {Tasks, LastTs} = lists:mapfoldl(
-        fun ({Ts, ID}, _LastWas) -> {build_task(ID, Ts), Ts} end,
+        fun({Ts, ID}, _LastWas) -> {build_task(ID, Ts), Ts} end,
         CurrentTs,
         Timers
     ),
     MinDelay = maps:get(min_scan_delay, Options, 1000),
-    OptimalDelay = case Continuation of
-        undefined -> seconds_to_delay(Lookahead);
-        _Other    -> seconds_to_delay(LastTs - CurrentTs)
-    end,
+    OptimalDelay =
+        case Continuation of
+            undefined -> seconds_to_delay(Lookahead);
+            _Other -> seconds_to_delay(LastTs - CurrentTs)
+        end,
     Delay = erlang:max(OptimalDelay, MinDelay),
     {{Delay, Tasks}, State}.
 
--spec seconds_to_delay(_Seconds :: integer()) ->
-    scan_delay().
+-spec seconds_to_delay(_Seconds :: integer()) -> scan_delay().
 seconds_to_delay(Seconds) ->
     erlang:convert_time_unit(Seconds, second, millisecond).
 
--spec execute_task(options(), task()) ->
-    ok.
+-spec execute_task(options(), task()) -> ok.
 execute_task(Options, #{id := MachineID, target_time := Timestamp}) ->
     %% NOTE
     %% Machine identified by `MachineID` may in fact already have processed timeout signal so that
@@ -113,7 +110,6 @@ execute_task(Options, #{id := MachineID, target_time := Timestamp}) ->
     Deadline = mg_core_deadline:from_timeout(Timeout),
     ok = mg_core_machine:send_timeout(machine_options(Options), MachineID, Timestamp, Deadline).
 
--spec machine_options(options()) ->
-    mg_core_machine:options().
+-spec machine_options(options()) -> mg_core_machine:options().
 machine_options(#{machine := MachineOptions}) ->
     MachineOptions.
