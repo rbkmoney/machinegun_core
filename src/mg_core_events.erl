@@ -83,8 +83,8 @@
 -type metadata() :: #{
     % Версия формата данных
     %
-    % Задаётся процессором и должна только _расти_ в процессе эволюции процессора. По умолчанию не задана,
-    % что равноценно _минимально возможной_ версии.
+    % Задаётся процессором и должна только _расти_ в процессе эволюции процессора. По умолчанию не
+    % задана, что равноценно _минимально возможной_ версии.
     format_version => format_version()
 }.
 
@@ -264,8 +264,10 @@ event_to_opaque(#{id := EventID, created_at := Date, body := Body}, BodyPacker) 
     Vsn = 2,
     [Vsn, EventID, Date, BodyPacker(Vsn, Body)].
 
--spec opaque_to_event(mg_core_storage:opaque(), fun((Vsn :: 1..2, mg_core_storage:opaque()) -> T)) ->
-    event(T).
+-spec opaque_to_event(
+    mg_core_storage:opaque(),
+    fun((Vsn :: 1..2, mg_core_storage:opaque()) -> T)
+) -> event(T).
 opaque_to_event([Vsn, EventID, Date, Body], BodyUnpacker) when
     Vsn =:= 1;
     Vsn =:= 2

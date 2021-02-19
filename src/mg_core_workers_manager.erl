@@ -63,7 +63,7 @@
 -type deadline() :: mg_core_deadline:deadline().
 
 %% Constants
--define(default_message_queue_len_limit, 50).
+-define(DEFAULT_MESSAGE_QUEUE_LEN_LIMIT, 50).
 
 %%
 %% API
@@ -236,7 +236,7 @@ do_start_child(SelfRef, Name, ID, ReqCtx) ->
 
 -spec message_queue_len_limit(options()) -> queue_limit().
 message_queue_len_limit(Options) ->
-    maps:get(message_queue_len_limit, Options, ?default_message_queue_len_limit).
+    maps:get(message_queue_len_limit, Options, ?DEFAULT_MESSAGE_QUEUE_LEN_LIMIT).
 
 -spec self_ref(options()) -> gen_ref().
 self_ref(Options) ->

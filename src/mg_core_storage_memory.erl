@@ -333,7 +333,7 @@ do_cleanup_indexes(Key, State = #{indexes := Indexes}) ->
 do_cleanup_index(Key, Index) ->
     lists:foldr(
         fun
-            ({_IndexValue, Key_}, AccIndex) when Key_ =:= Key ->
+            ({_IndexValue, IndexKey}, AccIndex) when IndexKey =:= Key ->
                 AccIndex;
             ({IndexValue, OtherKey}, AccIndex) ->
                 [{IndexValue, OtherKey} | AccIndex]

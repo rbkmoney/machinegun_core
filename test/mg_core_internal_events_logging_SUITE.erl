@@ -63,7 +63,7 @@ end_per_suite(C) ->
 %%
 %% tests
 %%
--define(req_ctx, <<"req_ctx">>).
+-define(REQ_CTX, <<"req_ctx">>).
 
 %% Errors in event hadler don't affect machine
 -spec robust_handling(config()) -> _.
@@ -74,7 +74,7 @@ robust_handling(_C) ->
     Options = automaton_options(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, undefined, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, undefined, ?REQ_CTX, mg_core_deadline:default()),
     ok = timer:sleep(2000),
     {retrying, _, _, _, _} = mg_core_machine:get_status(Options, ID),
 
@@ -99,9 +99,9 @@ pool_child_spec(_Options, Name) ->
     _,
     mg_core_machine:machine_state()
 ) -> mg_core_machine:processor_result() | no_return().
-process_machine(_, _, {init, _}, _, ?req_ctx, _, null) ->
+process_machine(_, _, {init, _}, _, ?REQ_CTX, _, null) ->
     {{reply, ok}, build_timer(), []};
-process_machine(_, _, timeout, _, ?req_ctx, _, _State) ->
+process_machine(_, _, timeout, _, ?REQ_CTX, _, _State) ->
     erlang:throw({transient, timeout_oops}).
 
 %%
@@ -144,4 +144,4 @@ handle_beat(_, _Event) ->
 
 -spec build_timer() -> mg_core_machine:processor_flow_action().
 build_timer() ->
-    {wait, genlib_time:unow() + 1, ?req_ctx, 5000}.
+    {wait, genlib_time:unow() + 1, ?REQ_CTX, 5000}.

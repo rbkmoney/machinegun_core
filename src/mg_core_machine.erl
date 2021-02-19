@@ -44,13 +44,15 @@
 %%  - неожиданные
 %%   - что-то пошло не так -- падение с любой другой ошибкой
 %%
-%% Например: throw:{logic, machine_not_found}, throw:{transient, {storage_unavailable, ...}}, error:badarg
+%% Например: throw:{logic, machine_not_found}, throw:{transient, {storage_unavailable, ...}},
+%% error:badarg
 %%
-%% Если в процессе обработки внешнего запроса происходит ожидаемая ошибка, она мапится в код ответа,
-%%  если неожидаемая ошибка, то запрос падает с internal_error, ошибка пишется в лог.
+%% Если в процессе обработки внешнего запроса происходит ожидаемая ошибка, она мапится в код
+%% ответа, если неожидаемая ошибка, то запрос падает с internal_error, ошибка пишется в лог.
 %%
-%% Если в процессе обработки запроса машиной происходит ожидаемая ошибка, то она прокидывается вызывающему коду,
-%%  если неожидаемая, то машина переходит в error состояние и в ответ возникает ошибка machine_failed.
+%% Если в процессе обработки запроса машиной происходит ожидаемая ошибка, то она прокидывается
+%% вызывающему коду, если неожидаемая, то машина переходит в error состояние и в ответ возникает
+%% ошибка machine_failed.
 %%
 %% Хранилище и процессор кидают либо ошибку о недоступности, либо падают.
 %%
@@ -405,7 +407,7 @@ reply(#{call_context := CallContext}, Reply) ->
 -define(DEFAULT_RETRY_POLICY, {exponential, infinity, 2, 10, 60 * 1000}).
 -define(DEFAULT_SCHEDULER_CAPACITY, 1000).
 
--define(can_be_retried(ErrorType), ErrorType =:= transient orelse ErrorType =:= timeout).
+-define(CAN_BE_RETRIED(ErrorType), ErrorType =:= transient orelse ErrorType =:= timeout).
 
 %%
 
@@ -467,7 +469,8 @@ handle_load(ID, Options, ReqCtx) ->
 handle_call(Call, CallContext, ReqCtx, Deadline, S = #{storage_machine := StorageMachine}) ->
     PCtx = new_processing_context(CallContext),
 
-    % довольно сложное место, тут определяется приоритет реакции на внешние раздражители, нужно быть аккуратнее
+    % довольно сложное место, тут определяется приоритет реакции на внешние раздражители, нужно
+    % быть аккуратнее
     case {Call, StorageMachine} of
         % восстановление после ошибок обращения в хранилище
         {Call, unknown} ->
@@ -646,9 +649,9 @@ opaque_to_machine_status(Opaque) ->
 %%
 %% indexes
 %%
--define(status_idx, {integer, <<"status">>}).
--define(waiting_idx, {integer, <<"waiting_date">>}).
--define(retrying_idx, {integer, <<"retrying_date">>}).
+-define(STATUS_IDX, {integer, <<"status">>}).
+-define(WAITING_IDX, {integer, <<"waiting_date">>}).
+-define(RETRYING_IDX, {integer, <<"retrying_date">>}).
 
 -spec storage_search_query(
     search_query(),
@@ -665,19 +668,19 @@ storage_search_query(Query, Limit) ->
 
 -spec storage_search_query(search_query()) -> mg_core_storage:index_query().
 storage_search_query(sleeping) ->
-    {?status_idx, 1};
+    {?STATUS_IDX, 1};
 storage_search_query(waiting) ->
-    {?status_idx, 2};
+    {?STATUS_IDX, 2};
 storage_search_query({waiting, FromTs, ToTs}) ->
-    {?waiting_idx, {FromTs, ToTs}};
+    {?WAITING_IDX, {FromTs, ToTs}};
 storage_search_query(processing) ->
-    {?status_idx, 3};
+    {?STATUS_IDX, 3};
 storage_search_query(failed) ->
-    {?status_idx, 4};
+    {?STATUS_IDX, 4};
 storage_search_query(retrying) ->
-    {?status_idx, 5};
+    {?STATUS_IDX, 5};
 storage_search_query({retrying, FromTs, ToTs}) ->
-    {?retrying_idx, {FromTs, ToTs}}.
+    {?RETRYING_IDX, {FromTs, ToTs}}.
 
 -spec storage_machine_to_indexes(storage_machine()) -> [mg_core_storage:index_update()].
 storage_machine_to_indexes(#{status := Status}) ->
@@ -693,13 +696,13 @@ status_index(Status) ->
             {error, _, _} -> 4;
             {retrying, _, _, _, _} -> 5
         end,
-    [{?status_idx, StatusInt}].
+    [{?STATUS_IDX, StatusInt}].
 
 -spec status_range_index(machine_status()) -> [mg_core_storage:index_update()].
 status_range_index({waiting, Timestamp, _, _}) ->
-    [{?waiting_idx, Timestamp}];
+    [{?WAITING_IDX, Timestamp}];
 status_range_index({retrying, Timestamp, _, _, _}) ->
-    [{?retrying_idx, Timestamp}];
+    [{?RETRYING_IDX, Timestamp}];
 status_range_index(_) ->
     [].
 
@@ -745,7 +748,7 @@ process_with_retry(Impact, ProcessingCtx, ReqCtx, Deadline, State, RetryStrategy
     try
         process_unsafe(Impact, ProcessingCtx, ReqCtx, Deadline, try_init_state(Impact, State))
     catch
-        throw:(Reason = ({ErrorType, _Details})):ST when ?can_be_retried(ErrorType) ->
+        throw:(Reason = ({ErrorType, _Details})):ST when ?CAN_BE_RETRIED(ErrorType) ->
             ok = emit_beat(Opts, #mg_core_machine_process_transient_error{
                 namespace = NS,
                 machine_id = ID,
@@ -921,7 +924,7 @@ reschedule(ReqCtx, Deadline, State) ->
         }),
         NewState
     catch
-        throw:(Reason = ({ErrorType, _Details})):ST when ?can_be_retried(ErrorType) ->
+        throw:(Reason = ({ErrorType, _Details})):ST when ?CAN_BE_RETRIED(ErrorType) ->
             Exception = {throw, Reason, ST},
             ok = emit_beat(Options, #mg_core_timer_lifecycle_rescheduling_error{
                 namespace = NS,

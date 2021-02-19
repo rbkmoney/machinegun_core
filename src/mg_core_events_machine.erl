@@ -144,8 +144,6 @@ start_link(Options) ->
         ])
     ).
 
--define(default_deadline, mg_core_deadline:from_timeout(5000)).
-
 -spec start(options(), mg_core:id(), term(), request_context(), deadline()) -> ok.
 start(Options, ID, Args, ReqCtx, Deadline) ->
     HRange = {undefined, undefined, forward},
@@ -357,8 +355,8 @@ process_machine_(
         case apply_delayed_actions_to_state(DelayedActions, State) of
             remove ->
                 {remove, State};
-            NewState_ ->
-                {state_to_flow_action(NewState_), NewState_}
+            State1 ->
+                {state_to_flow_action(State1), State1}
         end,
     ok = emit_action_beats(Options, ID, ReqCtx, DelayedActions),
     {ReplyAction, FlowAction, NewState}.

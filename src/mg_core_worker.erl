@@ -58,7 +58,7 @@
 
 -type pulse() :: mg_core_pulse:handler().
 
--define(wrap_id(NS, ID), {?MODULE, {NS, ID}}).
+-define(WRAP_ID(NS, ID), {?MODULE, {NS, ID}}).
 
 -spec child_spec(atom(), options()) -> supervisor:child_spec().
 child_spec(ChildID, Options) ->
@@ -73,7 +73,7 @@ child_spec(ChildID, Options) ->
 start_link(Options, NS, ID, ReqCtx) ->
     mg_core_procreg:start_link(
         procreg_options(Options),
-        ?wrap_id(NS, ID),
+        ?WRAP_ID(NS, ID),
         ?MODULE,
         {ID, Options, ReqCtx},
         []
@@ -97,7 +97,7 @@ call(Options, NS, ID, Call, ReqCtx, Deadline, Pulse) ->
     }),
     mg_core_procreg:call(
         procreg_options(Options),
-        ?wrap_id(NS, ID),
+        ?WRAP_ID(NS, ID),
         {call, Deadline, Call, ReqCtx},
         mg_core_deadline:to_timeout(Deadline)
     ).
@@ -138,7 +138,7 @@ is_alive(Options, NS, ID) ->
 list(Procreg, NS) ->
     [
         {NS, ID, Pid}
-        || {?wrap_id(_, ID), Pid} <- mg_core_procreg:select(Procreg, ?wrap_id(NS, '$1'))
+        || {?WRAP_ID(_, ID), Pid} <- mg_core_procreg:select(Procreg, ?WRAP_ID(NS, '$1'))
     ].
 
 %%
@@ -219,7 +219,10 @@ handle_cast(Cast, State) ->
 -spec handle_info(_Info, state()) -> mg_core_utils:gen_server_handle_info_ret(state()).
 handle_info(timeout, State) ->
     {noreply, State, hibernate};
-handle_info({timeout, TRef, unload}, State = #{mod := Mod, unload_tref := TRef, status := Status}) ->
+handle_info(
+    {timeout, TRef, unload},
+    State = #{mod := Mod, unload_tref := TRef, status := Status}
+) ->
     case Status of
         {working, ModState} ->
             _ = Mod:handle_unload(ModState);
@@ -268,7 +271,7 @@ start_timer(State) ->
 
 -spec self_ref(options(), mg_core:ns(), mg_core:id()) -> mg_core_procreg:ref().
 self_ref(Options, NS, ID) ->
-    mg_core_procreg:ref(procreg_options(Options), ?wrap_id(NS, ID)).
+    mg_core_procreg:ref(procreg_options(Options), ?WRAP_ID(NS, ID)).
 
 -spec procreg_options(options()) -> mg_core_procreg:options().
 procreg_options(#{registry := ProcregOptions}) ->

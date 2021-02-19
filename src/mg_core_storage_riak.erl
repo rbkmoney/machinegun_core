@@ -17,8 +17,8 @@
 %%%
 %%% Riak хранилище для machinegun'а.
 %%%
-%%% Важный момент, что единовременно не может существовать 2-х процессов записи в БД по одной машине,
-%%%  это гарантируется самим MG (а точнее mg_core_workers).
+%%% Важный момент, что единовременно не может существовать 2-х процессов записи в БД по одной
+%%% машине, это гарантируется самим MG (а точнее mg_core_workers).
 %%%
 %%%  Всё энкодится в msgpack и версионируется в метадате.
 %%%
@@ -33,7 +33,8 @@
 %%% Ошибка {error, timeout} — это неопределённость и нужно понять, что с этим делать!
 %%%  (Мы предполагаем, что тот факт, что мы получили неопределённость от одной из нод
 %%%    транслируется в неопределённость на один запрос)
-%%% Нужно делать все записи в базу идемпотентными и при любой ошибке неопределённости или недоступности ретраить.
+%%% Нужно делать все записи в базу идемпотентными и при любой ошибке неопределённости или
+%%% недоступности ретраить.
 %%%
 %%% Вопросы:
 %%%  - Равен ли размера cp кластера MG размеру кластера riak? (нет, это совсем разные кластеры)
@@ -366,9 +367,9 @@ common_index_opts(Options) ->
 %% packer
 %%
 %% фи-фи подтекает абстракция вызова mg_core_storage:opaque_to_binary(Value)
--define(msgpack_ct, "application/x-msgpack").
--define(schema_version_md_key, <<"schema-version">>).
--define(schema_version_1, <<"1">>).
+-define(MSGPACK_CT, "application/x-msgpack").
+-define(SCHEMA_VERSION_MD_KEY, <<"schema-version">>).
+-define(SCHEMA_VERSION_1, <<"1">>).
 
 -spec to_riak_obj(
     bucket(),
@@ -388,10 +389,10 @@ to_riak_obj(Bucket, Key, Context, Value, IndexesUpdates) ->
                     riakc_obj:get_metadata(Object),
                     prepare_indexes_updates(IndexesUpdates)
                 ),
-                {?schema_version_md_key, ?schema_version_1}
+                {?SCHEMA_VERSION_MD_KEY, ?SCHEMA_VERSION_1}
             )
         ),
-        ?msgpack_ct
+        ?MSGPACK_CT
     ).
 
 -spec new_riak_object(bucket(), mg_core_storage:key(), mg_core_storage:value()) ->
@@ -407,8 +408,8 @@ new_riak_object(Bucket, Key, Value) ->
 -spec from_riak_obj(riakc_obj:riakc_obj()) -> {context(), mg_core_storage:value()}.
 from_riak_obj(Object) ->
     Metadata = riakc_obj:get_metadata(Object),
-    ?schema_version_1 = riakc_obj:get_user_metadata_entry(Metadata, ?schema_version_md_key),
-    ?msgpack_ct = riakc_obj:get_content_type(Object),
+    ?SCHEMA_VERSION_1 = riakc_obj:get_user_metadata_entry(Metadata, ?SCHEMA_VERSION_MD_KEY),
+    ?MSGPACK_CT = riakc_obj:get_content_type(Object),
     {riakc_obj:vclock(Object), mg_core_storage:binary_to_opaque(riakc_obj:get_value(Object))}.
 
 -type riak_index_name() :: {integer_index, list()}.
@@ -451,7 +452,8 @@ handle_riak_response_({error, Reason}) ->
 %%
 %% Про опции посмотреть можно тут
 %% https://github.com/basho/riak-erlang-client/blob/develop/src/riakc_pb_socket.erl#L1526
-%% Почитать про NRW и прочую магию можно тут http://basho.com/posts/technical/riaks-config-behaviors-part-2/
+%% Почитать про NRW и прочую магию можно тут:
+%% http://basho.com/posts/technical/riaks-config-behaviors-part-2/
 %%
 -spec default_option(atom()) -> _.
 default_option(resolve_timeout) -> 5000;

@@ -81,4 +81,8 @@ call(Options, Name, Call, Timeout) ->
 
 -spec start_link(options(), name(), module(), _Args, list()) -> start_link_ret().
 start_link(Options, Name, Module, Args, Opts) ->
-    mg_core_utils:apply_mod_opts(Options, start_link, [reg_name(Options, Name), Module, Args, Opts]).
+    mg_core_utils:apply_mod_opts(
+        Options,
+        start_link,
+        [reg_name(Options, Name), Module, Args, Opts]
+    ).

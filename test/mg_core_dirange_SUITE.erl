@@ -197,7 +197,8 @@ intersect_test(_) ->
     ),
     ?assert(
         check_property(
-            % Left/right differences end up being only nonempty ranges when intersected with original range
+            % Left/right differences end up being only nonempty ranges when intersected with
+            % original range
             ?FORALL({R, With}, {range(), nonempty_range()}, begin
                 {LD, _, RD} = mg_core_dirange:intersect(R, With),
                 conjunction([

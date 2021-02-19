@@ -60,8 +60,8 @@ end_per_suite(C) ->
 %%
 %% tests
 %%
--define(init_args, <<"normies">>).
--define(req_ctx, <<"req_ctx">>).
+-define(INIT_ARGS, <<"normies">>).
+-define(REQ_CTX, <<"req_ctx">>).
 
 -spec interrupted_machines_resumed(config()) -> _.
 interrupted_machines_resumed(_C) ->
@@ -81,13 +81,13 @@ interrupted_machines_resumed(_C) ->
             ok = mg_core_machine:start(
                 Options,
                 ID,
-                ?init_args,
-                ?req_ctx,
+                ?INIT_ARGS,
+                ?REQ_CTX,
                 mg_core_deadline:default()
             ),
             ?assertEqual(
                 undefined,
-                mg_core_machine:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default())
+                mg_core_machine:call(Options, ID, answer, ?REQ_CTX, mg_core_deadline:default())
             ),
             ?assertEqual(
                 ok,
@@ -95,7 +95,7 @@ interrupted_machines_resumed(_C) ->
                     Options,
                     ID,
                     {run, Runtime, Answer},
-                    ?req_ctx,
+                    ?REQ_CTX,
                     mg_core_deadline:default()
                 )
             )
@@ -109,7 +109,7 @@ interrupted_machines_resumed(_C) ->
     _ = [
         ?assertEqual(
             Answer,
-            mg_core_machine:call(Options, ID, answer, ?req_ctx, mg_core_deadline:default())
+            mg_core_machine:call(Options, ID, answer, ?REQ_CTX, mg_core_deadline:default())
         )
         || ID <- IDs
     ],
@@ -129,14 +129,14 @@ interrupted_machines_resumed(_C) ->
     _,
     mg_core_machine:machine_state()
 ) -> mg_core_machine:processor_result() | no_return().
-process_machine(_, _, {init, ?init_args}, _, ?req_ctx, _, null) ->
+process_machine(_, _, {init, ?INIT_ARGS}, _, ?REQ_CTX, _, null) ->
     {{reply, ok}, sleep, #{}};
-process_machine(_, _, {call, {run, Runtime, Answer}}, _, ?req_ctx, _, State) ->
+process_machine(_, _, {call, {run, Runtime, Answer}}, _, ?REQ_CTX, _, State) ->
     {{reply, ok}, {continue, #{}}, State#{<<"run">> => [Runtime, Answer]}};
-process_machine(_, _, continuation, _, ?req_ctx, _, #{<<"run">> := [Runtime, Answer]}) ->
+process_machine(_, _, continuation, _, ?REQ_CTX, _, #{<<"run">> := [Runtime, Answer]}) ->
     ok = timer:sleep(Runtime),
     {noreply, sleep, #{<<"answer">> => Answer}};
-process_machine(_, _, {call, answer}, _, ?req_ctx, _, State) ->
+process_machine(_, _, {call, answer}, _, ?REQ_CTX, _, State) ->
     {{reply, maps:get(<<"answer">>, State, undefined)}, sleep, State}.
 
 %%

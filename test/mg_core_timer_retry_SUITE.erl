@@ -85,7 +85,7 @@ end_per_group(_GroupName, C) ->
 %%
 %% tests
 %%
--define(req_ctx, <<"req_ctx">>).
+-define(REQ_CTX, <<"req_ctx">>).
 
 -spec transient_fail(config()) -> _.
 transient_fail(_C) ->
@@ -95,26 +95,26 @@ transient_fail(_C) ->
     Options = automaton_options(NS, {intervals, [1000, 1000, 1000, 1000, 1000, 1000, 1000]}),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
-    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, <<"normal">>, ?REQ_CTX, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
     ok = mg_core_machine:call(
         Options,
         ID,
         {set_mode, <<"failing">>},
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:default()
     ),
     ok = timer:sleep(3000),
-    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
     ok = mg_core_machine:call(
         Options,
         ID,
         {set_mode, <<"counting">>},
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:default()
     ),
     ok = timer:sleep(3000),
-    I = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    I = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
     true = I > 0,
 
     ok = stop_automaton(Pid).
@@ -127,18 +127,18 @@ permanent_fail(_C) ->
     Options = automaton_options(NS, {intervals, [1000]}),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, <<"normal">>, ?req_ctx, mg_core_deadline:default()),
-    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, <<"normal">>, ?REQ_CTX, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
     ok = mg_core_machine:call(
         Options,
         ID,
         {set_mode, <<"failing">>},
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:default()
     ),
     ok = timer:sleep(4000),
     {logic, machine_failed} =
-        (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default())),
 
     ok = stop_automaton(Pid).
 
@@ -161,17 +161,17 @@ pool_child_spec(_Options, Name) ->
     _,
     mg_core_machine:machine_state()
 ) -> mg_core_machine:processor_result() | no_return().
-process_machine(_, _, {init, Mode}, _, ?req_ctx, _, null) ->
+process_machine(_, _, {init, Mode}, _, ?REQ_CTX, _, null) ->
     {{reply, ok}, build_timer(), [Mode, 0]};
-process_machine(_, _, {call, get}, _, ?req_ctx, _, [_Mode, Counter] = State) ->
+process_machine(_, _, {call, get}, _, ?REQ_CTX, _, [_Mode, Counter] = State) ->
     {{reply, Counter}, build_timer(), State};
-process_machine(_, _, {call, {set_mode, NewMode}}, _, ?req_ctx, _, [_Mode, Counter]) ->
+process_machine(_, _, {call, {set_mode, NewMode}}, _, ?REQ_CTX, _, [_Mode, Counter]) ->
     {{reply, ok}, build_timer(), [NewMode, Counter]};
-process_machine(_, _, timeout, _, ?req_ctx, _, [<<"normal">>, _Counter] = State) ->
+process_machine(_, _, timeout, _, ?REQ_CTX, _, [<<"normal">>, _Counter] = State) ->
     {{reply, ok}, build_timer(), State};
-process_machine(_, _, timeout, _, ?req_ctx, _, [<<"counting">> = Mode, Counter]) ->
+process_machine(_, _, timeout, _, ?REQ_CTX, _, [<<"counting">> = Mode, Counter]) ->
     {{reply, ok}, build_timer(), [Mode, Counter + 1]};
-process_machine(_, _, timeout, _, ?req_ctx, _, [<<"failing">>, _Counter]) ->
+process_machine(_, _, timeout, _, ?REQ_CTX, _, [<<"failing">>, _Counter]) ->
     erlang:throw({transient, oops}).
 
 %%
@@ -220,4 +220,4 @@ handle_beat(_, Beat) ->
 
 -spec build_timer() -> mg_core_machine:processor_flow_action().
 build_timer() ->
-    {wait, genlib_time:unow() + 1, ?req_ctx, 5000}.
+    {wait, genlib_time:unow() + 1, ?REQ_CTX, 5000}.

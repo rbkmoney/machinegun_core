@@ -90,7 +90,7 @@ end_per_group(_, _C) ->
 %%
 %% tests
 %%
--define(req_ctx, <<"req_ctx">>).
+-define(REQ_CTX, <<"req_ctx">>).
 
 -spec simple_test(config()) -> _.
 simple_test(C) ->
@@ -100,53 +100,53 @@ simple_test(C) ->
     Pid = start_automaton(Options),
 
     {logic, machine_not_found} =
-        (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default())),
 
-    ok = mg_core_machine:start(Options, ID, {TestKey, 0}, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, {TestKey, 0}, ?REQ_CTX, mg_core_deadline:default()),
     {logic, machine_already_exist} =
         (catch mg_core_machine:start(
             Options,
             ID,
             {TestKey, 0},
-            ?req_ctx,
+            ?REQ_CTX,
             mg_core_deadline:default()
         )),
 
-    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, increment, ?req_ctx, mg_core_deadline:default()),
-    1 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, delayed_increment, ?req_ctx, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, increment, ?REQ_CTX, mg_core_deadline:default()),
+    1 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, delayed_increment, ?REQ_CTX, mg_core_deadline:default()),
     ok = timer:sleep(2000),
-    2 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    2 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
 
     % call fail/simple_repair
     {logic, machine_failed} =
-        (catch mg_core_machine:call(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
-    ok = mg_core_machine:simple_repair(Options, ID, ?req_ctx, mg_core_deadline:default()),
-    2 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+        (catch mg_core_machine:call(Options, ID, fail, ?REQ_CTX, mg_core_deadline:default())),
+    ok = mg_core_machine:simple_repair(Options, ID, ?REQ_CTX, mg_core_deadline:default()),
+    2 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
 
     % call fail/repair
     {logic, machine_failed} =
-        (catch mg_core_machine:call(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_machine:call(Options, ID, fail, ?REQ_CTX, mg_core_deadline:default())),
     repaired = mg_core_machine:repair(
         Options,
         ID,
         repair_arg,
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:default()
     ),
-    2 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    2 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
 
     % call fail/repair fail/repair
     {logic, machine_failed} =
-        (catch mg_core_machine:call(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_machine:call(Options, ID, fail, ?REQ_CTX, mg_core_deadline:default())),
     {logic, machine_failed} =
-        (catch mg_core_machine:repair(Options, ID, fail, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_machine:repair(Options, ID, fail, ?REQ_CTX, mg_core_deadline:default())),
     repaired = mg_core_machine:repair(
         Options,
         ID,
         repair_arg,
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:default()
     ),
     {logic, machine_already_working} =
@@ -154,15 +154,15 @@ simple_test(C) ->
             Options,
             ID,
             repair_arg,
-            ?req_ctx,
+            ?REQ_CTX,
             mg_core_deadline:default()
         )),
-    2 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    2 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
 
-    ok = mg_core_machine:call(Options, ID, remove, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, remove, ?REQ_CTX, mg_core_deadline:default()),
 
     {logic, machine_not_found} =
-        (catch mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())),
+        (catch mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default())),
 
     ok = stop_automaton(Pid).
 
@@ -185,22 +185,22 @@ pool_child_spec(_Options, Name) ->
     _,
     mg_core_machine:machine_state()
 ) -> mg_core_machine:processor_result() | no_return().
-process_machine(_, _, {_, fail}, _, ?req_ctx, _, _) ->
+process_machine(_, _, {_, fail}, _, ?REQ_CTX, _, _) ->
     _ = exit(1),
     {noreply, sleep, []};
-process_machine(_, _, {init, {TestKey, TestValue}}, _, ?req_ctx, _, null) ->
+process_machine(_, _, {init, {TestKey, TestValue}}, _, ?REQ_CTX, _, null) ->
     {{reply, ok}, sleep, [TestKey, TestValue]};
-process_machine(_, _, {call, get}, _, ?req_ctx, _, [TestKey, TestValue]) ->
+process_machine(_, _, {call, get}, _, ?REQ_CTX, _, [TestKey, TestValue]) ->
     {{reply, TestValue}, sleep, [TestKey, TestValue]};
-process_machine(_, _, {call, increment}, _, ?req_ctx, _, [TestKey, TestValue]) ->
+process_machine(_, _, {call, increment}, _, ?REQ_CTX, _, [TestKey, TestValue]) ->
     {{reply, ok}, sleep, [TestKey, TestValue + 1]};
-process_machine(_, _, {call, delayed_increment}, _, ?req_ctx, _, State) ->
-    {{reply, ok}, {wait, genlib_time:unow() + 1, ?req_ctx, 5000}, State};
-process_machine(_, _, {call, remove}, _, ?req_ctx, _, State) ->
+process_machine(_, _, {call, delayed_increment}, _, ?REQ_CTX, _, State) ->
+    {{reply, ok}, {wait, genlib_time:unow() + 1, ?REQ_CTX, 5000}, State};
+process_machine(_, _, {call, remove}, _, ?REQ_CTX, _, State) ->
     {{reply, ok}, remove, State};
-process_machine(_, _, timeout, _, ?req_ctx, _, [TestKey, TestValue]) ->
+process_machine(_, _, timeout, _, ?REQ_CTX, _, [TestKey, TestValue]) ->
     {noreply, sleep, [TestKey, TestValue + 1]};
-process_machine(_, _, {repair, repair_arg}, _, ?req_ctx, _, [TestKey, TestValue]) ->
+process_machine(_, _, {repair, repair_arg}, _, ?REQ_CTX, _, [TestKey, TestValue]) ->
     {{reply, repaired}, sleep, [TestKey, TestValue]}.
 
 %%

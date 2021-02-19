@@ -66,7 +66,7 @@ end_per_suite(C) ->
 %%
 %% tests
 %%
--define(req_ctx, <<"req_ctx">>).
+-define(REQ_CTX, <<"req_ctx">>).
 
 -spec instant_start_test(config()) -> _.
 instant_start_test(_C) ->
@@ -75,11 +75,11 @@ instant_start_test(_C) ->
     Options = automaton_options(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
-    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, 0, ?REQ_CTX, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, force_timeout, ?REQ_CTX, mg_core_deadline:default()),
     F = fun() ->
-        mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())
+        mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default())
     end,
     mg_core_ct_helper:assert_wait_expected(
         1,
@@ -96,11 +96,11 @@ without_shedulers_test(_C) ->
     Options = automaton_options_wo_shedulers(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
-    0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, 0, ?REQ_CTX, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, force_timeout, ?REQ_CTX, mg_core_deadline:default()),
     % machine is still alive
-    _ = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    _ = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
 
     ok = stop_automaton(Pid).
 
@@ -139,15 +139,15 @@ process_machine(_, _, Impact, _, ReqCtx, _, EncodedState) ->
     mg_core_machine:request_context(),
     machine_state()
 ) -> mg_core_machine:processor_result().
-do_process_machine({init, Counter}, ?req_ctx, State) ->
+do_process_machine({init, Counter}, ?REQ_CTX, State) ->
     {{reply, ok}, sleep, State#machine_state{counter = Counter}};
-do_process_machine({call, get}, ?req_ctx, #machine_state{counter = Counter} = State) ->
+do_process_machine({call, get}, ?REQ_CTX, #machine_state{counter = Counter} = State) ->
     ct:pal("Counter is ~p", [Counter]),
     {{reply, Counter}, sleep, State};
-do_process_machine({call, force_timeout}, ?req_ctx = ReqCtx, State) ->
+do_process_machine({call, force_timeout}, ?REQ_CTX = ReqCtx, State) ->
     TimerTarget = genlib_time:unow(),
     {{reply, ok}, sleep, State#machine_state{timer = {TimerTarget, ReqCtx}}};
-do_process_machine(timeout, ?req_ctx, #machine_state{counter = Counter} = State) ->
+do_process_machine(timeout, ?REQ_CTX, #machine_state{counter = Counter} = State) ->
     ct:pal("Counter updated to ~p", [Counter + 1]),
     {{reply, ok}, sleep, State#machine_state{counter = Counter + 1, timer = undefined}}.
 

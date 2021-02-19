@@ -16,7 +16,8 @@
 
 %%%
 %%% Юнит тесты для воркеров.
-%%% Задача — проверить корректность работы части отвечающей за автоматическое поднятие и выгрузку воркеров для машин.
+%%% Задача — проверить корректность работы части отвечающей за автоматическое поднятие и выгрузку
+%%% воркеров для машин.
 %%%
 %%% TODO:
 %%%  - проверить выгрузку
@@ -129,33 +130,33 @@ end_per_group(_, _C) ->
 %%
 %% base group tests
 %%
--define(unload_timeout, 200).
--define(req_ctx, <<"req_ctx">>).
+-define(UNLOAD_TIMEOUT, 200).
+-define(REQ_CTX, <<"req_ctx">>).
 
 -spec base_test(config()) -> _.
 base_test(C) ->
     % чтобы увидеть падение воркера линкуемся к нему
-    Options = workers_options(?unload_timeout, #{link_pid => erlang:self()}, C),
+    Options = workers_options(?UNLOAD_TIMEOUT, #{link_pid => erlang:self()}, C),
     Pid = start_workers(Options),
-    hello = mg_core_workers_manager:call(Options, 42, hello, ?req_ctx, mg_core_deadline:default()),
-    ok = wait_machines_unload(?unload_timeout),
+    hello = mg_core_workers_manager:call(Options, 42, hello, ?REQ_CTX, mg_core_deadline:default()),
+    ok = wait_machines_unload(?UNLOAD_TIMEOUT),
     ok = stop_workers(Pid).
 
 -spec load_fail_test(config()) -> _.
 load_fail_test(C) ->
     % тут процесс специально падает, поэтому линк не нужен
-    Options = workers_options(?unload_timeout, #{fail_on => load}, C),
+    Options = workers_options(?UNLOAD_TIMEOUT, #{fail_on => load}, C),
     Pid = start_workers(Options),
     {error, {unexpected_exit, _}} =
-        mg_core_workers_manager:call(Options, 42, hello, ?req_ctx, mg_core_deadline:default()),
-    ok = wait_machines_unload(?unload_timeout),
+        mg_core_workers_manager:call(Options, 42, hello, ?REQ_CTX, mg_core_deadline:default()),
+    ok = wait_machines_unload(?UNLOAD_TIMEOUT),
     ok = stop_workers(Pid).
 
 -spec load_error_test(config()) -> _.
 load_error_test(C) ->
     % чтобы увидеть падение воркера линкуемся к нему
     Options = workers_options(
-        ?unload_timeout,
+        ?UNLOAD_TIMEOUT,
         #{load_error => test_error, link_pid => erlang:self()},
         C
     ),
@@ -164,54 +165,54 @@ load_error_test(C) ->
         Options,
         42,
         hello,
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:default()
     ),
-    ok = wait_machines_unload(?unload_timeout),
+    ok = wait_machines_unload(?UNLOAD_TIMEOUT),
     ok = stop_workers(Pid).
 
 -spec call_fail_test(config()) -> _.
 call_fail_test(C) ->
     % тут процесс специально падает, поэтому линк не нужен
-    Options = workers_options(?unload_timeout, #{fail_on => call}, C),
+    Options = workers_options(?UNLOAD_TIMEOUT, #{fail_on => call}, C),
     Pid = start_workers(Options),
     {error, {unexpected_exit, _}} =
-        mg_core_workers_manager:call(Options, 43, hello, ?req_ctx, mg_core_deadline:default()),
-    ok = wait_machines_unload(?unload_timeout),
+        mg_core_workers_manager:call(Options, 43, hello, ?REQ_CTX, mg_core_deadline:default()),
+    ok = wait_machines_unload(?UNLOAD_TIMEOUT),
     ok = stop_workers(Pid).
 
 -spec unload_fail_test(config()) -> _.
 unload_fail_test(C) ->
     % падение при unload'е мы не замечаем :(
-    Options = workers_options(?unload_timeout, #{fail_on => unload}, C),
+    Options = workers_options(?UNLOAD_TIMEOUT, #{fail_on => unload}, C),
     Pid = start_workers(Options),
-    hello = mg_core_workers_manager:call(Options, 42, hello, ?req_ctx, mg_core_deadline:default()),
-    ok = wait_machines_unload(?unload_timeout),
+    hello = mg_core_workers_manager:call(Options, 42, hello, ?REQ_CTX, mg_core_deadline:default()),
+    ok = wait_machines_unload(?UNLOAD_TIMEOUT),
     ok = stop_workers(Pid).
 
 -spec unload_test(config()) -> _.
 unload_test(C) ->
-    Options = workers_options(?unload_timeout, #{link_pid => self()}, C),
+    Options = workers_options(?UNLOAD_TIMEOUT, #{link_pid => self()}, C),
     Pid = start_workers(Options),
-    hello = mg_core_workers_manager:call(Options, 42, hello, ?req_ctx, mg_core_deadline:default()),
+    hello = mg_core_workers_manager:call(Options, 42, hello, ?REQ_CTX, mg_core_deadline:default()),
     WorkerPid = wait_worker_pid(42),
-    ok = wait_worker_unload(WorkerPid, ?unload_timeout * 2),
+    ok = wait_worker_unload(WorkerPid, ?UNLOAD_TIMEOUT * 2),
     ok = stop_workers(Pid).
 
 -spec unload_loading_test(config()) -> _.
 unload_loading_test(C) ->
     LoadLag = 100,
-    Options = workers_options(?unload_timeout, #{link_pid => self(), load_lag => LoadLag}, C),
+    Options = workers_options(?UNLOAD_TIMEOUT, #{link_pid => self(), load_lag => LoadLag}, C),
     Pid = start_workers(Options),
     {error, {timeout, _}} = mg_core_workers_manager:call(
         Options,
         42,
         hello,
-        ?req_ctx,
+        ?REQ_CTX,
         mg_core_deadline:from_timeout(LoadLag div 2)
     ),
     WorkerPid = wait_worker_pid(42),
-    ok = wait_worker_unload(WorkerPid, LoadLag + ?unload_timeout * 2),
+    ok = wait_worker_unload(WorkerPid, LoadLag + ?UNLOAD_TIMEOUT * 2),
     ok = stop_workers(Pid).
 
 -spec wait_worker_pid(_ID) -> pid().
@@ -263,7 +264,7 @@ stress_test_do_test_call(Options, WorkersCount, RetrySt) ->
     ID = rand:uniform(WorkersCount),
     % проверим, что отвечают действительно на наш запрос
     Call = {hello, erlang:make_ref()},
-    case mg_core_workers_manager:call(Options, ID, Call, ?req_ctx, mg_core_deadline:default()) of
+    case mg_core_workers_manager:call(Options, ID, Call, ?REQ_CTX, mg_core_deadline:default()) of
         Call -> ok;
         {error, Reason} -> maybe_retry(Reason, RetrySt)
     end.
@@ -295,7 +296,7 @@ manager_contention_test(C) ->
 manager_contention_test_call(Options, N, RetrySt) ->
     % проверим, что отвечают действительно на наш запрос
     Call = {hello, erlang:make_ref()},
-    case mg_core_workers_manager:call(Options, N, Call, ?req_ctx, mg_core_deadline:default()) of
+    case mg_core_workers_manager:call(Options, N, Call, ?REQ_CTX, mg_core_deadline:default()) of
         Call -> ok;
         {error, {transient, overload}} -> ok;
         {error, Reason} -> maybe_retry(Reason, RetrySt)
@@ -424,16 +425,16 @@ workers_options(UnloadTimeout, MsgQueueLen, WorkerParams, C) ->
 -type worker_state() :: worker_params().
 
 -spec handle_load(_ID, _, worker_params()) -> {ok, worker_state()} | {error, _}.
-handle_load(_, #{load_error := Reason}, ?req_ctx) ->
+handle_load(_, #{load_error := Reason}, ?REQ_CTX) ->
     {error, Reason};
-handle_load(ID, Params, ?req_ctx) ->
+handle_load(ID, Params, ?REQ_CTX) ->
     ok = try_link(ID, Params),
     ok = try_exit(load, Params),
     ok = timer:sleep(maps:get(load_lag, Params, 0)),
     {ok, Params}.
 
 -spec handle_call(_Call, _From, _, _, worker_state()) -> {{reply, _Resp}, worker_state()}.
-handle_call(Call, _From, ?req_ctx, _Deadline, State) ->
+handle_call(Call, _From, ?REQ_CTX, _Deadline, State) ->
     ok = try_exit(call, State),
     {{reply, Call}, State}.
 

@@ -244,7 +244,7 @@ validate_key(_Key) ->
 %%
 %% Internal API
 %%
--define(msgpack_options, [
+-define(MSGPACK_OPTIONS, [
     {spec, new},
     {allow_atom, none},
     {unpack_str, as_tagged_list},
@@ -255,7 +255,7 @@ validate_key(_Key) ->
 
 -spec opaque_to_binary(opaque()) -> binary().
 opaque_to_binary(Opaque) ->
-    case msgpack:pack(Opaque, ?msgpack_options) of
+    case msgpack:pack(Opaque, ?MSGPACK_OPTIONS) of
         Data when is_binary(Data) ->
             Data;
         {error, Reason} ->
@@ -264,7 +264,7 @@ opaque_to_binary(Opaque) ->
 
 -spec binary_to_opaque(binary()) -> opaque().
 binary_to_opaque(Binary) ->
-    case msgpack:unpack(Binary, ?msgpack_options) of
+    case msgpack:unpack(Binary, ?MSGPACK_OPTIONS) of
         {ok, Data} ->
             Data;
         {error, Reason} ->
