@@ -309,8 +309,7 @@ join(_, []) -> [];
 join(_, [H]) -> H;
 join(Delim, [H | T]) -> [H, Delim, join(Delim, T)].
 
--spec partition([T], [{Owner, Weight}, ...]) -> #{Owner => [T]} when
-    Weight :: non_neg_integer().
+-spec partition([T], [{Owner, Weight}, ...]) -> #{Owner => [T]} when Weight :: non_neg_integer().
 partition(L, Owners = [_ | _]) ->
     WeightSum = lists:foldl(fun({_, W}, Acc) -> Acc + W end, 0, Owners),
     partition(L, Owners, erlang:max(WeightSum, 1), #{}).
