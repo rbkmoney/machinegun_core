@@ -20,20 +20,20 @@
 
 -type options() :: #{
     % manager
-    start_interval   => non_neg_integer(),
-    capacity         := non_neg_integer(),
-    quota_name       := mg_core_quota_worker:name(),
-    quota_share      => mg_core_quota:share(),
+    start_interval => non_neg_integer(),
+    capacity := non_neg_integer(),
+    quota_name := mg_core_quota_worker:name(),
+    quota_share => mg_core_quota:share(),
     % scanner
-    queue_handler    := mg_core_queue_scanner:queue_handler(),
-    max_scan_limit   => mg_core_queue_scanner:scan_limit() | unlimited,
-    scan_ahead       => mg_core_queue_scanner:scan_ahead(),
+    queue_handler := mg_core_queue_scanner:queue_handler(),
+    max_scan_limit => mg_core_queue_scanner:scan_limit() | unlimited,
+    scan_ahead => mg_core_queue_scanner:scan_ahead(),
     retry_scan_delay => mg_core_queue_scanner:scan_delay(),
-    squad_opts       => mg_core_gen_squad:opts(),
+    squad_opts => mg_core_gen_squad:opts(),
     % workers
-    task_handler     := mg_core_utils:mod_opts(),
+    task_handler := mg_core_utils:mod_opts(),
     % common
-    pulse            => mg_core_pulse:handler()
+    pulse => mg_core_pulse:handler()
 }.
 
 -export_type([options/0]).
@@ -43,18 +43,16 @@
 
 %%
 
--spec child_spec(id(), options(), _ChildID) ->
-    supervisor:child_spec().
+-spec child_spec(id(), options(), _ChildID) -> supervisor:child_spec().
 child_spec(ID, Options, ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [ID, Options]},
-        restart  => permanent,
-        type     => supervisor
+        id => ChildID,
+        start => {?MODULE, start_link, [ID, Options]},
+        restart => permanent,
+        type => supervisor
     }.
 
--spec start_link(id(), options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(id(), options()) -> mg_core_utils:gen_start_ret().
 start_link(SchedulerID, Options) ->
     ManagerOptions = maps:with(
         [start_interval, capacity, quota_name, quota_share, pulse],

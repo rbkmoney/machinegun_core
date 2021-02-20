@@ -19,9 +19,9 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% tests descriptions
--export([all           /0]).
+-export([all/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
 -export([continuation_delayed_retries_test/1]).
@@ -36,11 +36,10 @@
 %%
 %% tests descriptions
 %%
--type test_name () :: atom().
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()].
+-spec all() -> [test_name()].
 all() ->
     [
         continuation_delayed_retries_test
@@ -49,16 +48,14 @@ all() ->
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_events_sink_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
@@ -72,24 +69,30 @@ end_per_suite(C) ->
 -define(MH_NS, <<"42_ns">>).
 -define(ETS_NS, ?MODULE).
 
--spec continuation_delayed_retries_test(config()) ->
-    _.
+-spec continuation_delayed_retries_test(config()) -> _.
 continuation_delayed_retries_test(_C) ->
     Options = automaton_options(),
     Pid = start_automaton(Options),
     ID = ?MH_ID,
-    ok = mg_core_machine:start(Options, ID, #{},  ?REQ_CTX, mg_core_deadline:default()),
-    ok = mg_core_machine:call (Options, ID, test, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, #{}, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, test, ?REQ_CTX, mg_core_deadline:default()),
     ok = timer:sleep(?TEST_SLEEP),
-    2  = get_fail_count(),
-    _  = stop_automaton(Pid).
+    2 = get_fail_count(),
+    _ = stop_automaton(Pid).
 
 %%
 %% processor
 %%
 
--spec process_machine(_Options, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
-    mg_core_machine:processor_result() | no_return().
+-spec process_machine(
+    _Options,
+    mg_core:id(),
+    mg_core_machine:processor_impact(),
+    _,
+    _,
+    _,
+    mg_core_machine:machine_state()
+) -> mg_core_machine:processor_result() | no_return().
 process_machine(_, _, {init, InitState}, _, ?REQ_CTX, _, null) ->
     _ = ets:new(?ETS_NS, [set, named_table, public]),
     {{reply, ok}, sleep, InitState};
@@ -105,44 +108,38 @@ process_machine(_, _, continuation, _, ?REQ_CTX, _, _State) ->
 %% utils
 %%
 
--spec get_fail_count() ->
-    non_neg_integer().
+-spec get_fail_count() -> non_neg_integer().
 get_fail_count() ->
     [{fail_count, FailCount}] = ets:lookup(?ETS_NS, fail_count),
     FailCount.
 
--spec update_fail_count(non_neg_integer()) ->
-    ok.
+-spec update_fail_count(non_neg_integer()) -> ok.
 update_fail_count(FailCount) ->
     true = ets:insert(?ETS_NS, {fail_count, FailCount}),
     ok.
 
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_machine:options()) -> pid().
 start_automaton(Options) ->
     mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
 
--spec stop_automaton(pid()) ->
-    ok.
+-spec stop_automaton(pid()) -> ok.
 stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options() ->
-    mg_core_machine:options().
+-spec automaton_options() -> mg_core_machine:options().
 automaton_options() ->
     #{
         namespace => ?MH_NS,
         processor => ?MODULE,
-        storage   => mg_core_storage_memory,
-        worker    => #{registry => mg_core_procreg_gproc},
-        pulse     => ?MODULE,
-        retries   => #{
+        storage => mg_core_storage_memory,
+        worker => #{registry => mg_core_procreg_gproc},
+        pulse => ?MODULE,
+        retries => #{
             continuation => {intervals, ?TEST_INTERVALS}
         }
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).

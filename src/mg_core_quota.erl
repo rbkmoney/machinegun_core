@@ -102,8 +102,7 @@
 %% API
 %%
 
--spec new(options()) ->
-    state().
+-spec new(options()) -> state().
 new(#{limit := #{value := Limit}} = Options) ->
     #state{
         options = Options,
@@ -126,8 +125,7 @@ reserve(#{client_id := ClientID} = Client, Usage, Expectation, State0) ->
     },
     {ok, NewTarget, NewState}.
 
--spec recalculate_targets(state()) ->
-    {ok, state()}.
+-spec recalculate_targets(state()) -> {ok, state()}.
 recalculate_targets(#state{clients = Clients} = State) when map_size(Clients) =:= 0 ->
     {ok, State};
 recalculate_targets(State) ->
@@ -138,8 +136,7 @@ recalculate_targets(State) ->
     NewClients = recalculate_clients_targets(Limit, Clients),
     {ok, State#state{clients = NewClients}}.
 
--spec remove_client(client_id(), state()) ->
-    state().
+-spec remove_client(client_id(), state()) -> state().
 remove_client(ClientID, State) ->
     #state{clients = Clients, resource_state = Resource} = State,
     case maps:find(ClientID, Clients) of
@@ -155,8 +152,7 @@ remove_client(ClientID, State) ->
 
 % Resource state
 
--spec new_resource_state(Limit :: resource()) ->
-    resource_state().
+-spec new_resource_state(Limit :: resource()) -> resource_state().
 new_resource_state(Limit) ->
     #resource_state{
         limit = Limit,
@@ -179,8 +175,7 @@ allocate_resource(Amount, #resource_state{free = Free} = State) ->
     Allocated = erlang:min(Amount, Free),
     {ok, Allocated, State#resource_state{free = Free - Allocated}}.
 
--spec free_resource(Amount :: resource(), resource_state()) ->
-    {ok, resource_state()}.
+-spec free_resource(Amount :: resource(), resource_state()) -> {ok, resource_state()}.
 free_resource(Amount, #resource_state{free = Free, limit = Limit} = State) ->
     NewFree = Free + Amount,
     true = Limit >= NewFree,
@@ -188,40 +183,43 @@ free_resource(Amount, #resource_state{free = Free, limit = Limit} = State) ->
 
 % Client stats management
 
--spec update_client_info(client_options(), Usage :: resource(), Expectation :: resource(), state()) ->
-    state().
+-spec update_client_info(
+    client_options(),
+    Usage :: resource(),
+    Expectation :: resource(),
+    state()
+) -> state().
 update_client_info(ClientOptions, Usage, Expectation, State) ->
     #state{clients = Clients} = State,
     #{client_id := ClientID, share := Share} = ClientOptions,
-    NewClientState = case maps:find(ClientID, Clients) of
-        {ok, ClientState} ->
-            ClientState#client_state{
-                usage = Usage,
-                expectation = Expectation,
-                share = Share
-            };
-        error ->
-            #client_state{
-                client_id = ClientID,
-                reserved = 0,
-                usage = Usage,
-                expectation = Expectation,
-                share = Share,
-                target = undefined
-            }
-    end,
+    NewClientState =
+        case maps:find(ClientID, Clients) of
+            {ok, ClientState} ->
+                ClientState#client_state{
+                    usage = Usage,
+                    expectation = Expectation,
+                    share = Share
+                };
+            error ->
+                #client_state{
+                    client_id = ClientID,
+                    reserved = 0,
+                    usage = Usage,
+                    expectation = Expectation,
+                    share = Share,
+                    target = undefined
+                }
+        end,
     State#state{clients = Clients#{ClientID => NewClientState}}.
 
--spec calc_reserve_target(client_state()) ->
-    ReserveTarget :: resource().
+-spec calc_reserve_target(client_state()) -> ReserveTarget :: resource().
 calc_reserve_target(#client_state{target = undefined, expectation = Expectation}) ->
     Expectation;
 calc_reserve_target(#client_state{target = Target, expectation = Expectation, usage = Usage}) ->
     % Select number close to Expectation, but no more then Target, and no less then Usage
     erlang:min(erlang:max(Usage, Target), Expectation).
 
--spec calc_reserve_result(client_state()) ->
-    NewTarget :: resource().
+-spec calc_reserve_result(client_state()) -> NewTarget :: resource().
 calc_reserve_result(#client_state{target = undefined, reserved = Reserved}) ->
     Reserved;
 calc_reserve_result(#client_state{target = Target, reserved = Reserved}) ->
@@ -237,35 +235,30 @@ try_reserve(ReserveTarget, ClientState, Resource) ->
     NewClientState = ClientState#client_state{reserved = NewReserved},
     {ok, NewClientState, NewResource}.
 
--spec recalculate_clients_targets(resource(), clients()) ->
-    clients().
+-spec recalculate_clients_targets(resource(), clients()) -> clients().
 recalculate_clients_targets(Limit, ClientsMap) ->
     Clients = maps:values(ClientsMap),
-    NewClients = case lists:sum([C#client_state.expectation || C <- Clients]) of
-        TotalExpectation when TotalExpectation =< Limit ->
-            % Turn off force resource management
-            reset_client_targets(Clients);
-        TotalExpectation when TotalExpectation > Limit ->
-            % Turn on fair resource redistribution
-            fair_share_resources(Clients, Limit)
-    end,
+    NewClients =
+        case lists:sum([C#client_state.expectation || C <- Clients]) of
+            TotalExpectation when TotalExpectation =< Limit ->
+                % Turn off force resource management
+                reset_client_targets(Clients);
+            TotalExpectation when TotalExpectation > Limit ->
+                % Turn on fair resource redistribution
+                fair_share_resources(Clients, Limit)
+        end,
     maps:from_list([{C#client_state.client_id, C} || C <- NewClients]).
 
--spec reset_client_targets([client_state()]) ->
-    [client_state()].
+-spec reset_client_targets([client_state()]) -> [client_state()].
 reset_client_targets(Clients) ->
     [C#client_state{target = undefined} || C <- Clients].
 
--spec fair_share_resources([client_state()], resource()) ->
-    [client_state()].
+-spec fair_share_resources([client_state()], resource()) -> [client_state()].
 fair_share_resources(Clients, Limit) ->
-    InitalClients = [
-        C#client_state{target = 0} || C <- Clients
-    ],
+    InitalClients = [C#client_state{target = 0} || C <- Clients],
     do_fair_share_resources(InitalClients, Limit, []).
 
--spec do_fair_share_resources([client_state()], resource(), [client_state()]) ->
-    [client_state()].
+-spec do_fair_share_resources([client_state()], resource(), [client_state()]) -> [client_state()].
 do_fair_share_resources([], _Limit, FinalClients) ->
     FinalClients;
 do_fair_share_resources(Clients, 0, FinalClients) ->
@@ -298,8 +291,7 @@ filter_needy_client(Clients, FinalClients) ->
     {Needy, NotNeedy} = lists:partition(fun is_needy_client/1, Clients),
     {Needy, NotNeedy ++ FinalClients}.
 
--spec is_needy_client(client_state()) ->
-    boolean().
+-spec is_needy_client(client_state()) -> boolean().
 is_needy_client(#client_state{expectation = E, target = T}) ->
     E > T.
 
@@ -309,7 +301,9 @@ is_needy_client(#client_state{expectation = E, target = T}) ->
 share_resource(Fun, Params, Limit, Clients) ->
     do_share_resource(Fun, Params, Limit, Clients, []).
 
--spec do_share_resource(Fun, Params, resource(), [client_state()], [client_state()]) -> [client_state()] when
+-spec do_share_resource(Fun, Params, resource(), [client_state()], [client_state()]) ->
+    [client_state()]
+when
     Params :: any(),
     Fun :: fun((client_state(), Params) -> resource()).
 do_share_resource(_Fun, _Params, _Limit, [], Result) ->
@@ -321,14 +315,12 @@ do_share_resource(Fun, Params, Limit, [Client | Clients], Result) when Limit > 0
     NewClient = Client#client_state{target = Client#client_state.target + TargetDiff},
     do_share_resource(Fun, Params, Limit - TargetDiff, Clients, [NewClient | Result]).
 
--spec get_share_target(client_state(), float()) ->
-    resource().
+-spec get_share_target(client_state(), float()) -> resource().
 get_share_target(#client_state{share = S}, ResourcePerShare) when S > 0 ->
     erlang:max(erlang:trunc(S * ResourcePerShare), 1);
 get_share_target(#client_state{share = S}, _ResourcePerShare) when S =:= 0 ->
     0.
 
--spec get_no_share_target(client_state(), float()) ->
-    resource().
+-spec get_no_share_target(client_state(), float()) -> resource().
 get_no_share_target(_Client, Resource) ->
     erlang:max(erlang:trunc(Resource), 1).

@@ -4,9 +4,9 @@
 -include_lib("stdlib/include/assert.hrl").
 
 %% CT
--export([all           /0]).
+-export([all/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% Tests
 -export([stash_enlarge_test/1]).
@@ -37,10 +37,11 @@
 -type signal() :: mg_core_events_machine:signal().
 -type signal_result() :: mg_core_events_machine:signal_result().
 
-
 -type handlers() :: #{
     signal_handler => fun((signal(), aux_state(), [event()]) -> {aux_state(), [event()], action()}),
-    call_handler => fun((call(), aux_state(), [event()]) -> {term(), aux_state(), [event()], action()}),
+    call_handler => fun(
+        (call(), aux_state(), [event()]) -> {term(), aux_state(), [event()], action()}
+    ),
     sink_handler => fun(([event()]) -> ok)
 }.
 -type processor() :: {module(), handlers()}.
@@ -55,42 +56,39 @@
 
 %% Common test handlers
 
--spec all() ->
-    [test_name()].
+-spec all() -> [test_name()].
 all() ->
     [
-       stash_enlarge_test,
-       stash_shrink_test
+        stash_enlarge_test,
+        stash_shrink_test
     ].
 
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     {ok, StoragePid} = mg_core_storage_memory:start_link(#{name => ?MODULE}),
     true = erlang:unlink(StoragePid),
     [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
 %% Tests
 
--spec stash_enlarge_test(config()) ->
-    any().
+-spec stash_enlarge_test(config()) -> any().
 stash_enlarge_test(_C) ->
     MachineID = <<"machine_1">>,
     Options0 = #{
-        processor => {?MODULE, #{
-            signal_handler => fun
-                ({init, NewEvents}, AuxState, []) -> {AuxState, NewEvents, #{}}
-            end,
-            call_handler => fun
-                ({emit, NewEvents}, AuxState, _) -> {ok, AuxState, NewEvents, #{}}
-            end
-        }},
+        processor =>
+            {?MODULE, #{
+                signal_handler => fun({init, NewEvents}, AuxState, []) ->
+                    {AuxState, NewEvents, #{}}
+                end,
+                call_handler => fun({emit, NewEvents}, AuxState, _) ->
+                    {ok, AuxState, NewEvents, #{}}
+                end
+            }},
         namespace => <<"event_stash_test">>,
         event_stash_size => 3
     },
@@ -104,22 +102,25 @@ stash_enlarge_test(_C) ->
     Pid1 = start_automaton(Options1),
     ok = call(Options1, MachineID, {emit, [5, 6]}),
     ?assertEqual([1, 2, 3, 4, 5, 6], get_history(Options1, MachineID)),
-    ?assertEqual([6, 5, 4, 3, 2, 1], get_history(Options1, MachineID, {undefined, undefined, backward})),
+    ?assertEqual(
+        [6, 5, 4, 3, 2, 1],
+        get_history(Options1, MachineID, {undefined, undefined, backward})
+    ),
     ok = stop_automaton(Pid1).
 
--spec stash_shrink_test(config()) ->
-    any().
+-spec stash_shrink_test(config()) -> any().
 stash_shrink_test(_C) ->
     MachineID = <<"machine_2">>,
     Options0 = #{
-        processor => {?MODULE, #{
-            signal_handler => fun
-                ({init, NewEvents}, AuxState, []) -> {AuxState, NewEvents, #{}}
-            end,
-            call_handler => fun
-                ({emit, NewEvents}, AuxState, _) -> {ok, AuxState, NewEvents, #{}}
-            end
-        }},
+        processor =>
+            {?MODULE, #{
+                signal_handler => fun({init, NewEvents}, AuxState, []) ->
+                    {AuxState, NewEvents, #{}}
+                end,
+                call_handler => fun({emit, NewEvents}, AuxState, _) ->
+                    {ok, AuxState, NewEvents, #{}}
+                end
+            }},
         namespace => <<"event_stash_test">>,
         event_stash_size => 5
     },
@@ -127,18 +128,25 @@ stash_shrink_test(_C) ->
     ok = start(Options0, MachineID, [1, 2]),
     ok = call(Options0, MachineID, {emit, [3, 4, 5]}),
     ?assertEqual([1, 2, 3, 4, 5], get_history(Options0, MachineID)),
-    ?assertEqual([5, 4, 3, 2, 1], get_history(Options0, MachineID, {undefined, undefined, backward})),
+    ?assertEqual(
+        [5, 4, 3, 2, 1],
+        get_history(Options0, MachineID, {undefined, undefined, backward})
+    ),
     ok = stop_automaton(Pid0),
     Options1 = Options0#{event_stash_size => 3},
     Pid1 = start_automaton(Options1),
     ok = call(Options1, MachineID, {emit, [6, 7]}),
     ?assertEqual([1, 2, 3, 4, 5, 6, 7], get_history(Options1, MachineID)),
-    ?assertEqual([7, 6, 5, 4, 3, 2, 1], get_history(Options1, MachineID, {undefined, undefined, backward})),
+    ?assertEqual(
+        [7, 6, 5, 4, 3, 2, 1],
+        get_history(Options1, MachineID, {undefined, undefined, backward})
+    ),
     ok = stop_automaton(Pid1).
 
 %% Processor handlers
 
--spec process_signal(handlers(), req_ctx(), deadline(), mg_core_events_machine:signal_args()) -> signal_result().
+-spec process_signal(handlers(), req_ctx(), deadline(), mg_core_events_machine:signal_args()) ->
+    signal_result().
 process_signal(Handlers, _ReqCtx, _Deadline, {EncodedSignal, Machine}) ->
     Handler = maps:get(signal_handler, Handlers, fun dummy_signal_handler/3),
     {AuxState, History} = decode_machine(Machine),
@@ -150,7 +158,8 @@ process_signal(Handlers, _ReqCtx, _Deadline, {EncodedSignal, Machine}) ->
     StateChange = {AuxStateContent, Events},
     {StateChange, ComplexAction}.
 
--spec process_call(handlers(), req_ctx(), deadline(), mg_core_events_machine:call_args()) -> call_result().
+-spec process_call(handlers(), req_ctx(), deadline(), mg_core_events_machine:call_args()) ->
+    call_result().
 process_call(Handlers, _ReqCtx, _Deadline, {EncodedCall, Machine}) ->
     Handler = maps:get(call_handler, Handlers, fun dummy_call_handler/3),
     {AuxState, History} = decode_machine(Machine),
@@ -162,7 +171,8 @@ process_call(Handlers, _ReqCtx, _Deadline, {EncodedCall, Machine}) ->
     StateChange = {AuxStateContent, Events},
     {encode(Result), StateChange, ComplexAction}.
 
--spec process_repair(options(), req_ctx(), deadline(), mg_core_events_machine:repair_args()) -> repair_result().
+-spec process_repair(options(), req_ctx(), deadline(), mg_core_events_machine:repair_args()) ->
+    repair_result().
 process_repair(Options, _ReqCtx, _Deadline, {EncodedArgs, Machine}) ->
     Handler = maps:get(repair_handler, Options, fun dummy_repair_handler/3),
     {AuxState, History} = decode_machine(Machine),
@@ -174,20 +184,17 @@ process_repair(Options, _ReqCtx, _Deadline, {EncodedArgs, Machine}) ->
     StateChange = {AuxStateContent, Events},
     {ok, {encode(Result), StateChange, ComplexAction}}.
 
--spec add_events(handlers(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) ->
-    ok.
+-spec add_events(handlers(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) -> ok.
 add_events(Handlers, _NS, _MachineID, Events, _ReqCtx, _Deadline) ->
     Handler = maps:get(sink_handler, Handlers, fun dummy_sink_handler/1),
     ct:pal("call sink handler ~p with [~p]", [Handler, Events]),
     ok = Handler(decode_events(Events)).
 
--spec dummy_signal_handler(signal(), aux_state(), [event()]) ->
-    {aux_state(), [event()], action()}.
+-spec dummy_signal_handler(signal(), aux_state(), [event()]) -> {aux_state(), [event()], action()}.
 dummy_signal_handler(_Signal, AuxState, _Events) ->
     {AuxState, [], #{}}.
 
--spec dummy_call_handler(signal(), aux_state(), [event()]) ->
-    {aux_state(), [event()], action()}.
+-spec dummy_call_handler(signal(), aux_state(), [event()]) -> {aux_state(), [event()], action()}.
 dummy_call_handler(_Signal, AuxState, _Events) ->
     {ok, AuxState, [], #{}}.
 
@@ -196,33 +203,30 @@ dummy_call_handler(_Signal, AuxState, _Events) ->
 dummy_repair_handler(_Args, AuxState, _Events) ->
     {ok, AuxState, [], #{}}.
 
--spec dummy_sink_handler([event()]) ->
-    ok.
+-spec dummy_sink_handler([event()]) -> ok.
 dummy_sink_handler(_Events) ->
     ok.
 
 %% Pulse handler
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).
 
 %% Internal functions
 
--spec start_automaton(options()) ->
-    pid().
+-spec start_automaton(options()) -> pid().
 start_automaton(Options) ->
-    mg_core_utils:throw_if_error(mg_core_events_machine:start_link(events_machine_options(Options))).
+    mg_core_utils:throw_if_error(
+        mg_core_events_machine:start_link(events_machine_options(Options))
+    ).
 
--spec stop_automaton(pid()) ->
-    ok.
+-spec stop_automaton(pid()) -> ok.
 stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec events_machine_options(options()) ->
-    mg_core_events_machine:options().
+-spec events_machine_options(options()) -> mg_core_events_machine:options().
 events_machine_options(Options) ->
     NS = maps:get(namespace, Options),
     Scheduler = #{registry => mg_core_procreg_gproc, interval => 100},
@@ -231,9 +235,10 @@ events_machine_options(Options) ->
         processor => maps:get(processor, Options),
         tagging => #{
             namespace => <<NS/binary, "_tags">>,
-            storage => {mg_core_storage_memory, #{
-                existing_storage_name => ?MODULE
-            }},
+            storage =>
+                {mg_core_storage_memory, #{
+                    existing_storage_name => ?MODULE
+                }},
             worker => #{
                 registry => mg_core_procreg_gproc
             },
@@ -242,22 +247,24 @@ events_machine_options(Options) ->
         },
         machines => #{
             namespace => NS,
-            storage => {mg_core_storage_memory, #{
-                existing_storage_name => ?MODULE
-            }},
+            storage =>
+                {mg_core_storage_memory, #{
+                    existing_storage_name => ?MODULE
+                }},
             worker => #{
                 registry => mg_core_procreg_gproc
             },
             pulse => ?MODULE,
             schedulers => #{
-                timers         => Scheduler,
+                timers => Scheduler,
                 timers_retries => Scheduler,
-                overseer       => Scheduler
+                overseer => Scheduler
             }
         },
-        events_storage => {mg_core_storage_memory, #{
-            existing_storage_name => ?MODULE
-        }},
+        events_storage =>
+            {mg_core_storage_memory, #{
+                existing_storage_name => ?MODULE
+            }},
         event_sinks => [
             {?MODULE, Options}
         ],
@@ -268,29 +275,32 @@ events_machine_options(Options) ->
 
 %%
 
--spec start(options(), mg_core:id(), term()) ->
-    ok.
+-spec start(options(), mg_core:id(), term()) -> ok.
 start(Options, MachineID, Args) ->
     Deadline = mg_core_deadline:from_timeout(3000),
     MgOptions = events_machine_options(Options),
     mg_core_events_machine:start(MgOptions, MachineID, encode(Args), <<>>, Deadline).
 
--spec call(options(), mg_core:id(), term()) ->
-    term().
+-spec call(options(), mg_core:id(), term()) -> term().
 call(Options, MachineID, Args) ->
     HRange = {undefined, undefined, forward},
     Deadline = mg_core_deadline:from_timeout(3000),
     MgOptions = events_machine_options(Options),
-    Result = mg_core_events_machine:call(MgOptions, {id, MachineID}, encode(Args), HRange, <<>>, Deadline),
+    Result = mg_core_events_machine:call(
+        MgOptions,
+        {id, MachineID},
+        encode(Args),
+        HRange,
+        <<>>,
+        Deadline
+    ),
     decode(Result).
 
--spec get_history(options(), mg_core:id()) ->
-    ok.
+-spec get_history(options(), mg_core:id()) -> ok.
 get_history(Options, MachineID) ->
     get_history(Options, MachineID, {undefined, undefined, forward}).
 
--spec get_history(options(), mg_core:id(), mg_core_events:history_range()) ->
-    ok.
+-spec get_history(options(), mg_core:id(), mg_core_events:history_range()) -> ok.
 get_history(Options, MachineID, HRange) ->
     MgOptions = events_machine_options(Options),
     Machine = mg_core_events_machine:get_machine(MgOptions, {id, MachineID}, HRange),
@@ -299,28 +309,24 @@ get_history(Options, MachineID, HRange) ->
 
 %% Codecs
 
--spec decode_machine(machine()) ->
-    {aux_state(), History :: [event()]}.
+-spec decode_machine(machine()) -> {aux_state(), History :: [event()]}.
 decode_machine(#{aux_state := EncodedAuxState, history := EncodedHistory}) ->
     {decode_aux_state(EncodedAuxState), decode_events(EncodedHistory)}.
 
--spec decode_aux_state(mg_core_events_machine:aux_state()) ->
-    aux_state().
+-spec decode_aux_state(mg_core_events_machine:aux_state()) -> aux_state().
 decode_aux_state({#{format_version := 1}, EncodedAuxState}) ->
     decode(EncodedAuxState);
 decode_aux_state({#{}, <<>>}) ->
     <<>>.
 
--spec decode_events([mg_core_events:event()]) ->
-    [event()].
+-spec decode_events([mg_core_events:event()]) -> [event()].
 decode_events(Events) ->
     [
         decode(EncodedEvent)
         || #{body := {#{}, EncodedEvent}} <- Events
     ].
 
--spec decode_signal(signal()) ->
-    signal().
+-spec decode_signal(signal()) -> signal().
 decode_signal(timeout) ->
     timeout;
 decode_signal({init, Args}) ->
@@ -328,12 +334,10 @@ decode_signal({init, Args}) ->
 decode_signal({repair, Args}) ->
     {repair, decode(Args)}.
 
--spec encode(term()) ->
-    binary().
+-spec encode(term()) -> binary().
 encode(Value) ->
     erlang:term_to_binary(Value).
 
--spec decode(binary()) ->
-    term().
+-spec decode(binary()) -> term().
 decode(Value) ->
     erlang:binary_to_term(Value, [safe]).

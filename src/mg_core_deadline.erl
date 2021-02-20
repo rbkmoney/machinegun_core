@@ -27,10 +27,11 @@
 -export([format/1]).
 
 %%
--type deadline() :: undefined | pos_integer(). % milliseconds since unix epoch
 
--spec from_timeout(timeout()) ->
-    deadline().
+% milliseconds since unix epoch
+-type deadline() :: undefined | pos_integer().
+
+-spec from_timeout(timeout()) -> deadline().
 from_timeout(infinity) ->
     undefined;
 from_timeout(Timeout) when is_integer(Timeout) ->
@@ -38,8 +39,7 @@ from_timeout(Timeout) when is_integer(Timeout) ->
 from_timeout(Timeout) ->
     erlang:error(badarg, [Timeout]).
 
--spec to_timeout(deadline()) ->
-    timeout().
+-spec to_timeout(deadline()) -> timeout().
 to_timeout(undefined) ->
     infinity;
 to_timeout(Deadline) when is_integer(Deadline) ->
@@ -47,41 +47,35 @@ to_timeout(Deadline) when is_integer(Deadline) ->
 to_timeout(Deadline) ->
     erlang:error(badarg, [Deadline]).
 
--spec from_unixtime_ms(non_neg_integer()) ->
-    deadline().
+-spec from_unixtime_ms(non_neg_integer()) -> deadline().
 from_unixtime_ms(Deadline) when is_integer(Deadline) ->
     Deadline;
 from_unixtime_ms(Deadline) ->
     erlang:error(badarg, [Deadline]).
 
--spec to_unixtime_ms(deadline()) ->
-    non_neg_integer().
+-spec to_unixtime_ms(deadline()) -> non_neg_integer().
 to_unixtime_ms(Deadline) when is_integer(Deadline) ->
     Deadline;
 to_unixtime_ms(Deadline) ->
     erlang:error(badarg, [Deadline]).
 
--spec is_reached(deadline()) ->
-    boolean().
+-spec is_reached(deadline()) -> boolean().
 is_reached(undefined) ->
     false;
 is_reached(Deadline) ->
     Deadline - now_ms() =< 0.
 
--spec default() ->
-    deadline().
+-spec default() -> deadline().
 default() ->
     %% For testing purposes only
     from_timeout(30000).
 
--spec format(mg_core_deadline:deadline()) ->
-    binary().
+-spec format(mg_core_deadline:deadline()) -> binary().
 format(Deadline) ->
     genlib_rfc3339:format_relaxed(Deadline, millisecond).
 
 %%
 
--spec now_ms() ->
-    pos_integer().
+-spec now_ms() -> pos_integer().
 now_ms() ->
     erlang:system_time(millisecond).

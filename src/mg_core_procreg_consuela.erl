@@ -33,18 +33,15 @@
 
 %%
 
--spec ref(options(), mg_core_procreg:name()) ->
-    mg_core_procreg:ref().
+-spec ref(options(), mg_core_procreg:name()) -> mg_core_procreg:ref().
 ref(_Options, Name) ->
     {via, consuela, Name}.
 
--spec reg_name(options(), mg_core_procreg:name()) ->
-    mg_core_procreg:reg_name().
+-spec reg_name(options(), mg_core_procreg:name()) -> mg_core_procreg:reg_name().
 reg_name(Options, Name) ->
     ref(Options, Name).
 
--spec select(options(), mg_core_procreg:name_pattern()) ->
-    [{mg_core_procreg:name(), pid()}].
+-spec select(options(), mg_core_procreg:name_pattern()) -> [{mg_core_procreg:name(), pid()}].
 select(_Options, NamePattern) ->
     consuela:select(NamePattern).
 
@@ -63,15 +60,15 @@ start_link(_Options, RegName, Module, Args, Opts) ->
             {error, map_error(Details)}
     end.
 
--spec call(options(), mg_core_procreg:ref(), _Call, timeout()) ->
-    _Reply.
+-spec call(options(), mg_core_procreg:ref(), _Call, timeout()) -> _Reply.
 call(_Options, Ref, Call, Timeout) ->
-    try gen_server:call(Ref, Call, Timeout) catch
+    try
+        gen_server:call(Ref, Call, Timeout)
+    catch
         exit:{{consuela, Details}, _MFA}:Stacktrace ->
             erlang:raise(exit, map_error(Details), Stacktrace)
     end.
 
--spec map_error(_Details) ->
-    tuple().
+-spec map_error(_Details) -> tuple().
 map_error(Details) ->
     {transient, {registry_unavailable, Details}}.

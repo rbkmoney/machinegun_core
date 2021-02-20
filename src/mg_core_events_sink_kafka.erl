@@ -45,8 +45,7 @@
 
 %% API
 
--spec add_events(options(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) ->
-    ok.
+-spec add_events(options(), mg_core:ns(), mg_core:id(), [event()], req_ctx(), deadline()) -> ok.
 add_events(Options, NS, MachineID, Events, ReqCtx, Deadline) ->
     #{pulse := Pulse, client := Client, topic := Topic, encoder := Encoder, name := Name} = Options,
     StartTimestamp = erlang:monotonic_time(),
@@ -69,13 +68,11 @@ add_events(Options, NS, MachineID, Events, ReqCtx, Deadline) ->
 
 %% Internals
 
--spec event_key(mg_core:ns(), mg_core:id()) ->
-    term().
+-spec event_key(mg_core:ns(), mg_core:id()) -> term().
 event_key(NS, MachineID) ->
     <<NS/binary, " ", MachineID/binary>>.
 
--spec encode(encoder(), mg_core:ns(), mg_core:id(), [event()]) ->
-    brod:batch_input().
+-spec encode(encoder(), mg_core:ns(), mg_core:id(), [event()]) -> brod:batch_input().
 encode(Encoder, NS, MachineID, Events) ->
     [
         #{
@@ -111,8 +108,7 @@ do_produce(Client, Topic, PartitionKey, Batch) ->
             Error
     end.
 
--spec handle_produce_error(atom()) ->
-    no_return().
+-spec handle_produce_error(atom()) -> no_return().
 handle_produce_error(timeout) ->
     erlang:throw({transient, timeout});
 handle_produce_error({producer_down, Reason}) ->
@@ -156,8 +152,7 @@ handle_produce_error(Reason) ->
             erlang:error({?MODULE, {unexpected, Reason}})
     end.
 
--spec batch_size(brod:batch_input()) ->
-    non_neg_integer().
+-spec batch_size(brod:batch_input()) -> non_neg_integer().
 batch_size(Batch) ->
     lists:foldl(
         fun(#{value := Value}, Acc) ->
@@ -167,7 +162,6 @@ batch_size(Batch) ->
         Batch
     ).
 
--spec partition(non_neg_integer(), brod:key()) ->
-    brod:partition().
+-spec partition(non_neg_integer(), brod:key()) -> brod:partition().
 partition(PartitionsCount, Key) ->
     erlang:phash2(Key) rem PartitionsCount.

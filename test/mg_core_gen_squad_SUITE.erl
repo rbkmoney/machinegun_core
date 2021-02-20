@@ -43,10 +43,9 @@
 %% tests descriptions
 
 -type test_name() :: atom().
--type config()    :: [{atom(), _}].
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()].
+-spec all() -> [test_name()].
 all() ->
     [
         squad_view_consistency_holds,
@@ -55,21 +54,18 @@ all() ->
 
 %% starting/stopping
 
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
 %%
 
--spec squad_view_consistency_holds(config()) ->
-    _.
+-spec squad_view_consistency_holds(config()) -> _.
 squad_view_consistency_holds(_) ->
     N = 5,
     Opts = #{
@@ -78,8 +74,11 @@ squad_view_consistency_holds(_) ->
         discovery => #{initial_interval => 200, refresh_interval => 1000},
         promotion => #{min_squad_age => 3}
     },
-    Members = lists:map(fun (_) -> start_member(Opts) end, lists:seq(1, N)),
-    ok = lists:foreach(fun ({M0, M1}) -> gen_server:cast(M0, {known, [M1]}) end, neighbours(Members)),
+    Members = lists:map(fun(_) -> start_member(Opts) end, lists:seq(1, N)),
+    ok = lists:foreach(
+        fun({M0, M1}) -> gen_server:cast(M0, {known, [M1]}) end,
+        neighbours(Members)
+    ),
     LeaderView = {Leader, _, _} = ?assertReceive({_, leader, _}),
     Followers = Members -- [Leader],
     _ = [?assertReceive({Follower, follower, _}) || Follower <- Followers],
@@ -94,8 +93,7 @@ squad_view_consistency_holds(_) ->
     _ = ?assertNoReceive(),
     ok.
 
--spec squad_shrinks_consistently(config()) ->
-    _.
+-spec squad_shrinks_consistently(config()) -> _.
 squad_shrinks_consistently(_) ->
     N = 5,
     Opts = #{
@@ -104,8 +102,11 @@ squad_shrinks_consistently(_) ->
         discovery => #{initial_interval => 200, refresh_interval => 1000},
         promotion => #{min_squad_age => 3}
     },
-    Members = lists:map(fun (_) -> start_member(Opts) end, lists:seq(1, N)),
-    ok = lists:foreach(fun ({M0, M1}) -> gen_server:cast(M0, {known, [M1]}) end, neighbours(Members)),
+    Members = lists:map(fun(_) -> start_member(Opts) end, lists:seq(1, N)),
+    ok = lists:foreach(
+        fun({M0, M1}) -> gen_server:cast(M0, {known, [M1]}) end,
+        neighbours(Members)
+    ),
     {Leader, _, _} = ?assertReceive({_, leader, _}),
     _ = [?assertReceive({Follower, follower, _}) || Follower <- Members, Follower /= Leader],
     Exhaust = fun
@@ -121,17 +122,15 @@ squad_shrinks_consistently(_) ->
     _ = ?assertEqual([LeaderLast], lists:filter(fun erlang:is_process_alive/1, Members)),
     ok.
 
--spec start_member(mg_core_gen_squad:opts()) ->
-    pid().
+-spec start_member(mg_core_gen_squad:opts()) -> pid().
 start_member(Opts) ->
     {ok, Pid} = mg_core_gen_squad:start_link(?MODULE, #{runner => self(), known => []}, Opts),
     Pid.
 
--spec neighbours([T]) ->
-    [{T, T}].
+-spec neighbours([T]) -> [{T, T}].
 neighbours([A | [B | _] = Rest]) -> [{A, B} | neighbours(Rest)];
-neighbours([_])                  -> [];
-neighbours([])                   -> [].
+neighbours([_]) -> [];
+neighbours([]) -> [].
 
 %%
 
@@ -140,25 +139,22 @@ neighbours([])                   -> [].
 
 -type st() :: #{
     runner := pid(),
-    known  := [pid()]
+    known := [pid()]
 }.
 
--spec init(st()) ->
-    {ok, st()}.
+-spec init(st()) -> {ok, st()}.
 init(St) ->
     {ok, St}.
 
--spec discover(st()) ->
-    {ok, [pid()], st()}.
+-spec discover(st()) -> {ok, [pid()], st()}.
 discover(St = #{known := Known}) ->
     {ok, Known, St}.
 
--spec handle_rank_change(rank(), squad(), st()) ->
-    {noreply, st()}.
+-spec handle_rank_change(rank(), squad(), st()) -> {noreply, st()}.
 handle_rank_change(Rank, Squad, St = #{runner := Runner}) ->
     _ = Runner ! {self(), Rank, mg_core_gen_squad:members(Squad)},
     case Rank of
-        leader   -> {noreply, St, 200};
+        leader -> {noreply, St, 200};
         follower -> {noreply, St}
     end;
 handle_rank_change(_Rank, _Squad, St) ->
@@ -166,8 +162,7 @@ handle_rank_change(_Rank, _Squad, St) ->
 
 -type call() :: report.
 
--spec handle_call(call(), _From, rank(), squad(), st()) ->
-    {noreply, st()} | {reply, _, st()}.
+-spec handle_call(call(), _From, rank(), squad(), st()) -> {noreply, st()} | {reply, _, st()}.
 handle_call(report, _From, Rank, Squad, St) ->
     {reply, {self(), Rank, mg_core_gen_squad:members(Squad)}, St};
 handle_call(Call, From, _Rank, _Squad, _St) ->
@@ -175,8 +170,7 @@ handle_call(Call, From, _Rank, _Squad, _St) ->
 
 -type cast() :: {known, [pid()]}.
 
--spec handle_cast(cast(), rank(), squad(), st()) ->
-    {noreply, st()}.
+-spec handle_cast(cast(), rank(), squad(), st()) -> {noreply, st()}.
 handle_cast({known, More}, _Rank, _Squad, St = #{known := Known}) ->
     {noreply, St#{known := Known ++ More}};
 handle_cast(Cast, _Rank, _Squad, _St) ->
@@ -184,16 +178,16 @@ handle_cast(Cast, _Rank, _Squad, _St) ->
 
 -type info() :: timeout.
 
--spec handle_info(info(), rank(), squad(), st()) ->
-    {noreply, st()}.
+-spec handle_info(info(), rank(), squad(), st()) -> {noreply, st()}.
 handle_info(timeout, leader, _Squad, St) ->
     {stop, normal, St};
 handle_info(Info, _Rank, _Squad, _St) ->
     erlang:error({unexpected, {info, Info}}).
 
--spec handle_beat(_, mg_core_gen_squad_pulse:beat()) ->
-    _.
-handle_beat(_Start, {{timer, _}, _}) -> ok;
-handle_beat(_Start, {{monitor, _}, _}) -> ok;
+-spec handle_beat(_, mg_core_gen_squad_pulse:beat()) -> _.
+handle_beat(_Start, {{timer, _}, _}) ->
+    ok;
+handle_beat(_Start, {{monitor, _}, _}) ->
+    ok;
 handle_beat(Start, Beat) ->
     io:format("+~6..0Bms ~0p ~0p", [erlang:system_time(millisecond) - Start, self(), Beat]).

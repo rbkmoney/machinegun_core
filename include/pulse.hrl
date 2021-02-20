@@ -1,4 +1,3 @@
-
 %% Timer operations
 
 -record(mg_core_timer_lifecycle_created, {
@@ -49,7 +48,8 @@
     request_context :: mg_core:request_context(),
     target_timestamp :: genlib_time:ts(),
     deadline :: mg_core_deadline:deadline(),
-    duration :: non_neg_integer()  % in native units
+    % in native units
+    duration :: non_neg_integer()
 }).
 
 %% Scheduler
@@ -60,7 +60,8 @@
     delay :: mg_core_queue_scanner:scan_delay(),
     tasks :: [mg_core_queue_task:task()],
     limit :: mg_core_queue_scanner:scan_limit(),
-    duration :: non_neg_integer()  % in native units
+    % in native units
+    duration :: non_neg_integer()
 }).
 
 -record(mg_core_scheduler_search_error, {
@@ -102,13 +103,14 @@
     scheduler_name :: mg_core_scheduler:name(),
     machine_id :: mg_core:id() | undefined,
     task_delay :: timeout(),
-    process_duration :: non_neg_integer()  % in native units
+    % in native units
+    process_duration :: non_neg_integer()
 }).
 
 -record(mg_core_scheduler_quota_reserved, {
     namespace :: mg_core:ns(),
     scheduler_name :: mg_core_scheduler:name(),
-    active_tasks :: non_neg_integer() ,
+    active_tasks :: non_neg_integer(),
     waiting_tasks :: non_neg_integer(),
     quota_name :: mg_core_quota_worker:name(),
     quota_reserved :: mg_core_quota:resource()
@@ -137,7 +139,8 @@
     machine_id :: mg_core:id(),
     request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
-    duration :: non_neg_integer()  % in native units
+    % in native units
+    duration :: non_neg_integer()
 }).
 
 %% Machines state
@@ -261,9 +264,12 @@
     machine_id :: mg_core:id(),
     request_context :: mg_core:request_context(),
     deadline :: mg_core_deadline:deadline(),
-    encode_duration :: non_neg_integer(),  % in native units
-    send_duration :: non_neg_integer(),  % in native units
-    data_size :: non_neg_integer(),  % in bytes
+    % in native units
+    encode_duration :: non_neg_integer(),
+    % in native units
+    send_duration :: non_neg_integer(),
+    % in bytes
+    data_size :: non_neg_integer(),
     partition :: brod:partition(),
     offset :: brod:offset()
 }).

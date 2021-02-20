@@ -18,11 +18,11 @@
 
 %% API
 -export_type([options/0]).
--export_type([tag    /0]).
+-export_type([tag/0]).
 -export([child_spec/2]).
--export([add       /5]).
--export([replace   /5]).
--export([resolve   /2]).
+-export([add/5]).
+-export([replace/5]).
+-export([resolve/2]).
 
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
@@ -30,35 +30,53 @@
 
 -type options() :: #{
     namespace => mg_core:ns(),
-    worker    => mg_core_workers_manager:options(),
-    storage   => mg_core_machine:storage_options(),
-    pulse     => mg_core_pulse:handler(),
-    retries   => mg_core_machine:retry_opt()
+    worker => mg_core_workers_manager:options(),
+    storage => mg_core_machine:storage_options(),
+    pulse => mg_core_pulse:handler(),
+    retries => mg_core_machine:retry_opt()
 }.
 -type tag() :: binary().
 
--spec child_spec(options(), atom()) ->
-    supervisor:child_spec().
+-spec child_spec(options(), atom()) -> supervisor:child_spec().
 child_spec(Options, ChildID) ->
     mg_core_machine:child_spec(machine_options(Options), ChildID).
 
 -spec add(options(), tag(), mg_core:id(), mg_core:request_context(), mg_core_deadline:deadline()) ->
     ok | {already_exists, mg_core:id()} | no_return().
 add(Options, Tag, ID, ReqCtx, Deadline) ->
-    mg_core_machine:call_with_lazy_start(machine_options(Options), Tag, {add, ID}, ReqCtx, Deadline, undefined).
+    mg_core_machine:call_with_lazy_start(
+        machine_options(Options),
+        Tag,
+        {add, ID},
+        ReqCtx,
+        Deadline,
+        undefined
+    ).
 
--spec replace(options(), tag(), mg_core:id(), mg_core:request_context(), mg_core_deadline:deadline()) ->
-    ok | no_return().
+-spec replace(
+    options(),
+    tag(),
+    mg_core:id(),
+    mg_core:request_context(),
+    mg_core_deadline:deadline()
+) -> ok | no_return().
 replace(Options, Tag, ID, ReqCtx, Deadline) ->
-    mg_core_machine:call_with_lazy_start(machine_options(Options), Tag, {replace, ID}, ReqCtx, Deadline, undefined).
+    mg_core_machine:call_with_lazy_start(
+        machine_options(Options),
+        Tag,
+        {replace, ID},
+        ReqCtx,
+        Deadline,
+        undefined
+    ).
 
--spec resolve(options(), tag()) ->
-    mg_core:id() | undefined | no_return().
+-spec resolve(options(), tag()) -> mg_core:id() | undefined | no_return().
 resolve(Options, Tag) ->
     try
         opaque_to_state(mg_core_machine:get(machine_options(Options), Tag))
-    catch throw:{logic, machine_not_found} ->
-        undefined
+    catch
+        throw:{logic, machine_not_found} ->
+            undefined
     end.
 
 %%
@@ -66,8 +84,15 @@ resolve(Options, Tag) ->
 %%
 -type state() :: mg_core:id() | undefined.
 
--spec process_machine(_, mg_core:id(), mg_core_machine:processor_impact(), _, _, _, mg_core_machine:machine_state()) ->
-    mg_core_machine:processor_result().
+-spec process_machine(
+    _,
+    mg_core:id(),
+    mg_core_machine:processor_impact(),
+    _,
+    _,
+    _,
+    mg_core_machine:machine_state()
+) -> mg_core_machine:processor_result().
 process_machine(_, _, {init, undefined}, _, _, _, _) ->
     {{reply, ok}, sleep, state_to_opaque(undefined)};
 process_machine(_, _, {repair, undefined}, _, _, _, State) ->
@@ -87,30 +112,29 @@ process_machine(_, _, {call, {replace, ID}}, _, _, _, _) ->
 %%
 %% local
 %%
--spec machine_options(options()) ->
-    mg_core_machine:options().
-machine_options(Opts = #{namespace:=Namespace, storage:=Storage, pulse := Pulse, retries := Retries}) ->
+-spec machine_options(options()) -> mg_core_machine:options().
+machine_options(
+    Opts = #{namespace := Namespace, storage := Storage, pulse := Pulse, retries := Retries}
+) ->
     #{
         namespace => Namespace,
         processor => ?MODULE,
-        worker    => maps:get(worker, Opts, #{}),
-        storage   => Storage,
-        pulse     => Pulse,
-        retries   => Retries
+        worker => maps:get(worker, Opts, #{}),
+        storage => Storage,
+        pulse => Pulse,
+        retries => Retries
     }.
 
 %%
 %% packer to opaque
 %%
--spec state_to_opaque(state()) ->
-    mg_core_storage:opaque().
+-spec state_to_opaque(state()) -> mg_core_storage:opaque().
 state_to_opaque(undefined) ->
     [1, null];
 state_to_opaque(ID) ->
     [1, ID].
 
--spec opaque_to_state(mg_core_storage:opaque()) ->
-    state().
+-spec opaque_to_state(mg_core_storage:opaque()) -> state().
 opaque_to_state([1, null]) ->
     undefined;
 opaque_to_state([1, ID]) ->

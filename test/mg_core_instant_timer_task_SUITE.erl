@@ -18,9 +18,9 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% tests descriptions
--export([all           /0]).
+-export([all/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
 -export([instant_start_test/1]).
@@ -39,69 +39,68 @@
 %%
 %% tests descriptions
 %%
--type test_name () :: atom().
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()] | {group, atom()}.
+-spec all() -> [test_name()] | {group, atom()}.
 all() ->
     [
-       instant_start_test,
-       without_shedulers_test
+        instant_start_test,
+        without_shedulers_test
     ].
 
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
 %%
 %% tests
 %%
--define(req_ctx, <<"req_ctx">>).
+-define(REQ_CTX, <<"req_ctx">>).
 
--spec instant_start_test(config()) ->
-    _.
+-spec instant_start_test(config()) -> _.
 instant_start_test(_C) ->
     NS = <<"test">>,
     ID = genlib:to_binary(?FUNCTION_NAME),
     Options = automaton_options(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
-     0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, 0, ?REQ_CTX, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, force_timeout, ?REQ_CTX, mg_core_deadline:default()),
     F = fun() ->
-            mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default())
-        end,
-    mg_core_ct_helper:assert_wait_expected(1, F, mg_core_retry:new_strategy({linear, _Retries = 10, _Timeout = 100})),
+        mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default())
+    end,
+    mg_core_ct_helper:assert_wait_expected(
+        1,
+        F,
+        mg_core_retry:new_strategy({linear, _Retries = 10, _Timeout = 100})
+    ),
 
     ok = stop_automaton(Pid).
 
--spec without_shedulers_test(config()) ->
-    _.
+-spec without_shedulers_test(config()) -> _.
 without_shedulers_test(_C) ->
     NS = <<"test">>,
     ID = genlib:to_binary(?FUNCTION_NAME),
     Options = automaton_options_wo_shedulers(NS),
     Pid = start_automaton(Options),
 
-    ok = mg_core_machine:start(Options, ID, 0, ?req_ctx, mg_core_deadline:default()),
-     0 = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
-    ok = mg_core_machine:call(Options, ID, force_timeout, ?req_ctx, mg_core_deadline:default()),
+    ok = mg_core_machine:start(Options, ID, 0, ?REQ_CTX, mg_core_deadline:default()),
+    0 = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
+    ok = mg_core_machine:call(Options, ID, force_timeout, ?REQ_CTX, mg_core_deadline:default()),
     % machine is still alive
-    _  = mg_core_machine:call(Options, ID, get, ?req_ctx, mg_core_deadline:default()),
+    _ = mg_core_machine:call(Options, ID, get, ?REQ_CTX, mg_core_deadline:default()),
 
     ok = stop_automaton(Pid).
 
@@ -114,11 +113,10 @@ without_shedulers_test(_C) ->
 }).
 -type machine_state() :: #machine_state{}.
 
--spec pool_child_spec(_Options, atom()) ->
-    supervisor:child_spec().
+-spec pool_child_spec(_Options, atom()) -> supervisor:child_spec().
 pool_child_spec(_Options, Name) ->
     #{
-        id    => Name,
+        id => Name,
         start => {?MODULE, start, []}
     }.
 
@@ -136,17 +134,20 @@ process_machine(_, _, Impact, _, ReqCtx, _, EncodedState) ->
     {Reply, Action, NewState} = do_process_machine(Impact, ReqCtx, State),
     {Reply, try_set_timer(NewState, Action), encode_state(NewState)}.
 
--spec do_process_machine(mg_core_machine:processor_impact(), mg_core_machine:request_context(), machine_state()) ->
-    mg_core_machine:processor_result().
-do_process_machine({init, Counter}, ?req_ctx, State) ->
+-spec do_process_machine(
+    mg_core_machine:processor_impact(),
+    mg_core_machine:request_context(),
+    machine_state()
+) -> mg_core_machine:processor_result().
+do_process_machine({init, Counter}, ?REQ_CTX, State) ->
     {{reply, ok}, sleep, State#machine_state{counter = Counter}};
-do_process_machine({call, get}, ?req_ctx, #machine_state{counter = Counter} = State) ->
+do_process_machine({call, get}, ?REQ_CTX, #machine_state{counter = Counter} = State) ->
     ct:pal("Counter is ~p", [Counter]),
     {{reply, Counter}, sleep, State};
-do_process_machine({call, force_timeout}, ?req_ctx = ReqCtx, State) ->
+do_process_machine({call, force_timeout}, ?REQ_CTX = ReqCtx, State) ->
     TimerTarget = genlib_time:unow(),
     {{reply, ok}, sleep, State#machine_state{timer = {TimerTarget, ReqCtx}}};
-do_process_machine(timeout, ?req_ctx, #machine_state{counter = Counter} = State) ->
+do_process_machine(timeout, ?REQ_CTX, #machine_state{counter = Counter} = State) ->
     ct:pal("Counter updated to ~p", [Counter + 1]),
     {{reply, ok}, sleep, State#machine_state{counter = Counter + 1, timer = undefined}}.
 
@@ -174,24 +175,20 @@ try_set_timer(#machine_state{timer = undefined}, Action) ->
 %%
 %% utils
 %%
--spec start()->
-    ignore.
+-spec start() -> ignore.
 start() ->
     ignore.
 
--spec start_automaton(mg_core_machine:options()) ->
-    pid().
+-spec start_automaton(mg_core_machine:options()) -> pid().
 start_automaton(Options) ->
     mg_core_utils:throw_if_error(mg_core_machine:start_link(Options)).
 
--spec stop_automaton(pid()) ->
-    ok.
+-spec stop_automaton(pid()) -> ok.
 stop_automaton(Pid) ->
     ok = proc_lib:stop(Pid, normal, 5000),
     ok.
 
--spec automaton_options(mg_core:ns()) ->
-    mg_core_machine:options().
+-spec automaton_options(mg_core:ns()) -> mg_core_machine:options().
 automaton_options(NS) ->
     Scheduler = #{
         min_scan_delay => timer:hours(1)
@@ -199,35 +196,33 @@ automaton_options(NS) ->
     #{
         namespace => NS,
         processor => ?MODULE,
-        storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{
+        storage => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
+        worker => #{
             registry => mg_core_procreg_gproc
         },
-        pulse     => ?MODULE,
+        pulse => ?MODULE,
         schedulers => #{
-            timers         => Scheduler,
+            timers => Scheduler,
             timers_retries => Scheduler,
-            overseer       => Scheduler
+            overseer => Scheduler
         }
     }.
 
--spec automaton_options_wo_shedulers(mg_core:ns()) ->
-    mg_core_machine:options().
+-spec automaton_options_wo_shedulers(mg_core:ns()) -> mg_core_machine:options().
 automaton_options_wo_shedulers(NS) ->
     #{
         namespace => NS,
         processor => ?MODULE,
-        storage   => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
-        worker    => #{
+        storage => mg_core_ct_helper:build_storage(NS, mg_core_storage_memory),
+        worker => #{
             registry => mg_core_procreg_gproc
         },
-        pulse     => ?MODULE,
+        pulse => ?MODULE,
         schedulers => #{
             % none
         }
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).

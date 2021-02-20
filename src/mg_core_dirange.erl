@@ -49,27 +49,23 @@
 
 %%
 
--spec empty() ->
-    dirange(_).
+-spec empty() -> dirange(_).
 empty() ->
     undefined.
 
--spec forward(_T :: integer(), _T :: integer()) ->
-    dirange(_T).
+-spec forward(_T :: integer(), _T :: integer()) -> dirange(_T).
 forward(A, B) when A =< B ->
     {A, B, +1};
 forward(A, B) when A > B ->
     {B, A, +1}.
 
--spec backward(_T :: integer(), _T :: integer()) ->
-    dirange(_T).
+-spec backward(_T :: integer(), _T :: integer()) -> dirange(_T).
 backward(A, B) when A >= B ->
     {A, B, -1};
 backward(A, B) when A < B ->
     {B, A, -1}.
 
--spec to_opaque(dirange(_)) ->
-    mg_core_storage:opaque().
+-spec to_opaque(dirange(_)) -> mg_core_storage:opaque().
 to_opaque(undefined) ->
     null;
 to_opaque({A, B, +1}) ->
@@ -77,8 +73,7 @@ to_opaque({A, B, +1}) ->
 to_opaque({A, B, D = -1}) ->
     [A, B, D].
 
--spec from_opaque(mg_core_storage:opaque()) ->
-    dirange(_).
+-spec from_opaque(mg_core_storage:opaque()) -> dirange(_).
 from_opaque(null) ->
     undefined;
 from_opaque([A, B]) ->
@@ -88,37 +83,33 @@ from_opaque([A, B, D]) ->
 
 %%
 
--spec align(dirange(T), _Pivot :: dirange(T)) ->
-    dirange(T).
+-spec align(dirange(T), _Pivot :: dirange(T)) -> dirange(T).
 align(R, Rp) ->
     case direction(R) * direction(Rp) of
         -1 -> reverse(R);
         _S -> R
     end.
 
--spec reverse(dirange(T)) ->
-    dirange(T).
+-spec reverse(dirange(T)) -> dirange(T).
 reverse({A, B, D}) ->
     {B, A, -D};
 reverse(undefined) ->
     undefined.
 
--spec dissect(dirange(T), T) ->
-    {dirange(T), dirange(T)}.
+-spec dissect(dirange(T), T) -> {dirange(T), dirange(T)}.
 dissect(undefined, _) ->
     {undefined, undefined};
 dissect({A, B, +1 = D} = R, C) ->
     if
-        C < A         -> {undefined, R};
-        B =< C        -> {R, undefined};
+        C < A -> {undefined, R};
+        B =< C -> {R, undefined};
         A =< C, C < B -> {{A, C, D}, {C + 1, B, D}}
     end;
 dissect(R, C) ->
     {R1, R2} = dissect(reverse(R), C - 1),
     {reverse(R2), reverse(R1)}.
 
--spec conjoin(dirange(T), dirange(T)) ->
-    dirange(T).
+-spec conjoin(dirange(T), dirange(T)) -> dirange(T).
 conjoin(undefined, R) ->
     R;
 conjoin(R, undefined) ->
@@ -130,21 +121,24 @@ conjoin(R1, R2) ->
 
 -spec intersect(_Range :: dirange(T), _With :: dirange(T)) ->
     {
-        _LeftDiff :: dirange(T),     % part of `Range` to the «left» of `With`
-        _Intersection :: dirange(T), % intersection between `Range` and `With`
-        _RightDiff :: dirange(T)     % part of `Range` to the «right» of `With`
+        % part of `Range` to the «left» of `With`
+        _LeftDiff :: dirange(T),
+        % intersection between `Range` and `With`
+        _Intersection :: dirange(T),
+        % part of `Range` to the «right» of `With`
+        _RightDiff :: dirange(T)
     }.
 intersect(R0, undefined) ->
     erlang:error(badarg, [R0, undefined]);
 intersect(R0, With) ->
     D0 = direction(R0),
     {WA, WB} = bounds(align(With, R0)),
-    {LeftDiff, R1} = dissect(R0, WA - D0), % to NOT include WA itself
+    % to NOT include WA itself
+    {LeftDiff, R1} = dissect(R0, WA - D0),
     {Intersection, RightDiff} = dissect(R1, WB),
     {LeftDiff, Intersection, RightDiff}.
 
--spec limit(dirange(T), non_neg_integer()) ->
-    dirange(T).
+-spec limit(dirange(T), non_neg_integer()) -> dirange(T).
 limit(undefined, _) ->
     undefined;
 limit(_, 0) ->
@@ -154,57 +148,49 @@ limit({A, B, +1}, N) when N > 0 ->
 limit({B, A, -1}, N) when N > 0 ->
     {B, erlang:max(A, B - N + 1), -1}.
 
--spec enumerate(dirange(T)) ->
-    [T].
+-spec enumerate(dirange(T)) -> [T].
 enumerate(undefined) ->
     [];
 enumerate({A, B, D}) ->
     lists:seq(A, B, D).
 
--spec fold(fun((T, Acc) -> Acc), Acc, dirange(T)) ->
-    Acc.
+-spec fold(fun((T, Acc) -> Acc), Acc, dirange(T)) -> Acc.
 fold(_, Acc, undefined) ->
     Acc;
 fold(F, Acc, {A, B, D}) ->
     fold(F, Acc, A, B, D).
 
--spec fold(fun((T, Acc) -> Acc), Acc, T, T, -1..1) ->
-    Acc.
+-spec fold(fun((T, Acc) -> Acc), Acc, T, T, -1..1) -> Acc.
 fold(F, Acc, A, A, _) ->
     F(A, Acc);
 fold(F, Acc, A, B, S) ->
     fold(F, F(A, Acc), A + S, B, S).
 
--spec direction(dirange(_)) ->
-    direction() | 0.
+-spec direction(dirange(_)) -> direction() | 0.
 direction({_, _, D}) ->
     D;
 direction(_) ->
     0.
 
--spec size(dirange(_)) ->
-    non_neg_integer().
+-spec size(dirange(_)) -> non_neg_integer().
 size(undefined) ->
     0;
 size({A, B, D}) ->
     (B - A) * D + 1.
 
--spec bounds(dirange(_T)) ->
-    {_T, _T} | undefined.
+-spec bounds(dirange(_T)) -> {_T, _T} | undefined.
 bounds({A, B, _}) ->
     {A, B};
 bounds(undefined) ->
     undefined.
 
--spec from(dirange(_T)) ->
-    _T | undefined.
+-spec from(dirange(_T)) -> _T | undefined.
 from(undefined) ->
     undefined;
 from({A, _, _}) ->
     A.
 
--spec to(dirange(_T)) ->
-    _T | undefined.
+-spec to(dirange(_T)) -> _T | undefined.
 to(undefined) ->
     undefined;
 to({_, B, _}) ->

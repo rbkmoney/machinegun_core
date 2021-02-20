@@ -32,13 +32,16 @@ BASE_IMAGE_NAME := service-erlang
 BASE_IMAGE_TAG := da0ab769f01b650b389d18fc85e7418e727cbe96
 
 # Build image tag to be used
-BUILD_IMAGE_TAG := 442c2c274c1d8e484e5213089906a4271641d95e
+BUILD_IMAGE_NAME := build-erlang
+BUILD_IMAGE_TAG := 61a001bbb48128895735a3ac35b0858484fdb2eb
 
 CALL_ANYWHERE := \
 	all \
 	submodules \
 	compile \
 	xref \
+	format \
+	check_format \
 	lint \
 	dialyze \
 	start \
@@ -69,7 +72,13 @@ xref: submodules
 	$(REBAR) xref
 
 lint:
-	elvis rock
+	$(REBAR) lint
+
+check_format:
+	$(REBAR) fmt -c
+
+format:
+	$(REBAR) fmt -w
 
 dialyze:
 	$(REBAR) dialyzer

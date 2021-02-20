@@ -33,10 +33,10 @@
 %% Types
 -type options() :: #{
     start_interval => non_neg_integer(),
-    capacity       := non_neg_integer(),
-    quota_name     := mg_core_quota_worker:name(),
-    quota_share    => mg_core_quota:share(),
-    pulse          => mg_core_pulse:handler()
+    capacity := non_neg_integer(),
+    quota_name := mg_core_quota_worker:name(),
+    quota_share => mg_core_quota:share(),
+    pulse => mg_core_pulse:handler()
 }.
 
 -type name() :: atom().
@@ -73,57 +73,51 @@
 -type task_rank() :: {target_time(), integer()}.
 
 -record(task_queue, {
-    runnable = #{}              :: task_set(),
+    runnable = #{} :: task_set(),
     runqueue = gb_trees:empty() :: gb_trees:tree(task_rank(), task_id()),
-    counter  = 1                :: integer()
+    counter = 1 :: integer()
 }).
 
 -type task_queue() :: #task_queue{}.
 
 -type status() :: #{
-    pid           := pid(),
-    active_tasks  := non_neg_integer(),
+    pid := pid(),
+    active_tasks := non_neg_integer(),
     waiting_tasks := non_neg_integer(),
-    capacity      := pos_integer()
+    capacity := pos_integer()
 }.
 
 %%
 %% API
 %%
 
--spec child_spec(id(), options(), _ChildID) ->
-    supervisor:child_spec().
+-spec child_spec(id(), options(), _ChildID) -> supervisor:child_spec().
 child_spec(ID, Options, ChildID) ->
     #{
-        id    => ChildID,
+        id => ChildID,
         start => {?MODULE, start_link, [ID, Options]},
-        type  => worker
+        type => worker
     }.
 
--spec start_link(id(), options()) ->
-    mg_core_utils:gen_start_ret().
+-spec start_link(id(), options()) -> mg_core_utils:gen_start_ret().
 start_link(ID, Options) ->
     gen_server:start_link(self_reg_name(ID), ?MODULE, {ID, Options}, []).
 
--spec inquire(id()) ->
-    status().
+-spec inquire(id()) -> status().
 inquire(ID) ->
     gen_server:call(self_ref(ID), inquire).
 
--spec send_task(id(), task()) ->
-    ok.
+-spec send_task(id(), task()) -> ok.
 send_task(ID, Task) ->
     gen_server:cast(self_ref(ID), {tasks, [Task]}).
 
--spec distribute_tasks(pid(), [task()]) ->
-    ok.
+-spec distribute_tasks(pid(), [task()]) -> ok.
 distribute_tasks(Pid, Tasks) when is_pid(Pid) ->
     gen_server:cast(Pid, {tasks, Tasks}).
 
 %% gen_server callbacks
 
--spec init({id(), options()}) ->
-    mg_core_utils:gen_server_init_ret(state()).
+-spec init({id(), options()}) -> mg_core_utils:gen_server_init_ret(state()).
 init({ID, Options}) ->
     {ok, TimerRef} = timer:send_interval(maps:get(start_interval, Options, 1000), start),
     {ok, #state{
@@ -143,10 +137,10 @@ init({ID, Options}) ->
     mg_core_utils:gen_server_handle_call_ret(state()).
 handle_call(inquire, _From, State) ->
     Status = #{
-        pid           => self(),
-        active_tasks  => get_active_task_count(State),
+        pid => self(),
+        active_tasks => get_active_task_count(State),
         waiting_tasks => get_waiting_task_count(State),
-        capacity      => State#state.capacity
+        capacity => State#state.capacity
     },
     {reply, Status, State};
 handle_call(Call, From, State) ->
@@ -156,8 +150,7 @@ handle_call(Call, From, State) ->
 -type cast() ::
     {tasks, [task()]}.
 
--spec handle_cast(cast(), state()) ->
-    mg_core_utils:gen_server_handle_cast_ret(state()).
+-spec handle_cast(cast(), state()) -> mg_core_utils:gen_server_handle_cast_ret(state()).
 handle_cast({tasks, Tasks}, State0) ->
     State1 = add_tasks(Tasks, State0),
     State2 = maybe_update_reserved(State1),
@@ -168,11 +161,10 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 -type info() ::
-    {'DOWN', monitor(), process, pid(), _Info} |
-    start.
+    {'DOWN', monitor(), process, pid(), _Info}
+    | start.
 
--spec handle_info(info(), state()) ->
-    mg_core_utils:gen_server_handle_info_ret(state()).
+-spec handle_info(info(), state()) -> mg_core_utils:gen_server_handle_info_ret(state()).
 handle_info({'DOWN', Monitor, process, _Object, _Info}, State0) ->
     State1 = forget_about_task(Monitor, State0),
     State2 = start_new_tasks(State1),
@@ -187,20 +179,17 @@ handle_info(Info, State) ->
 
 % Process registration
 
--spec self_reg_name(id()) ->
-    mg_core_procreg:reg_name().
+-spec self_reg_name(id()) -> mg_core_procreg:reg_name().
 self_reg_name(ID) ->
     mg_core_procreg:reg_name(mg_core_procreg_gproc, {?MODULE, ID}).
 
--spec self_ref(id()) ->
-    mg_core_procreg:ref().
+-spec self_ref(id()) -> mg_core_procreg:ref().
 self_ref(ID) ->
     mg_core_procreg:ref(mg_core_procreg_gproc, {?MODULE, ID}).
 
 % Helpers
 
--spec forget_about_task(monitor(), state()) ->
-    state().
+-spec forget_about_task(monitor(), state()) -> state().
 forget_about_task(Monitor, State) ->
     #state{active_tasks = Tasks, task_monitors = Monitors} = State,
     case maps:find(Monitor, Monitors) of
@@ -213,16 +202,14 @@ forget_about_task(Monitor, State) ->
             State
     end.
 
--spec add_tasks([task()], state()) ->
-    state().
+-spec add_tasks([task()], state()) -> state().
 add_tasks(Tasks, State = #state{waiting_tasks = WaitingTasks}) ->
     NewWaitingTasks = lists:foldl(fun enqueue_task/2, WaitingTasks, Tasks),
     NewTasksCount = get_task_queue_size(NewWaitingTasks) - get_task_queue_size(WaitingTasks),
     ok = emit_new_tasks_beat(NewTasksCount, State),
     State#state{waiting_tasks = NewWaitingTasks}.
 
--spec enqueue_task(task(), task_queue()) ->
-    task_queue().
+-spec enqueue_task(task(), task_queue()) -> task_queue().
 enqueue_task(
     Task = #{id := TaskID, target_time := TargetTime},
     Queue = #task_queue{runnable = Runnable, runqueue = RQ, counter = Counter}
@@ -238,8 +225,7 @@ enqueue_task(
     NewRQ = gb_trees:insert({TargetTime, Counter}, TaskID, RQ),
     Queue#task_queue{runnable = NewRunnable, runqueue = NewRQ, counter = Counter + 1}.
 
--spec start_new_tasks(state()) ->
-    state().
+-spec start_new_tasks(state()) -> state().
 start_new_tasks(State = #state{quota_reserved = Reserved, waiting_tasks = WaitingTasks}) ->
     TotalActiveTasks = get_active_task_count(State),
     NewTasksNumber = erlang:max(Reserved - TotalActiveTasks, 0),
@@ -247,8 +233,7 @@ start_new_tasks(State = #state{quota_reserved = Reserved, waiting_tasks = Waitin
     Iterator = make_iterator(CurrentTime, WaitingTasks),
     start_multiple_tasks(NewTasksNumber, Iterator, State).
 
--spec start_multiple_tasks(non_neg_integer(), task_queue_iterator(), state()) ->
-    state().
+-spec start_multiple_tasks(non_neg_integer(), task_queue_iterator(), state()) -> state().
 start_multiple_tasks(0, _Iterator, State) ->
     State;
 start_multiple_tasks(N, Iterator, State) when N > 0 ->
@@ -286,13 +271,11 @@ start_multiple_tasks(N, Iterator, State) when N > 0 ->
 -type task_queue_iterator() ::
     {gb_trees:iter(task_rank(), task_id()), target_time()}.
 
--spec make_iterator(target_time(), task_queue()) ->
-    task_queue_iterator().
+-spec make_iterator(target_time(), task_queue()) -> task_queue_iterator().
 make_iterator(TargetTimeCutoff, #task_queue{runqueue = Queue}) ->
     {gb_trees:iterator(Queue), TargetTimeCutoff}.
 
--spec next_task(task_queue_iterator()) ->
-    {task_rank(), task_id(), task_queue_iterator()} | none.
+-spec next_task(task_queue_iterator()) -> {task_rank(), task_id(), task_queue_iterator()} | none.
 next_task({Iterator, TargetTimeCutoff}) ->
     case gb_trees:next(Iterator) of
         {{TargetTime, _} = Rank, TaskID, IteratorNext} when TargetTime =< TargetTimeCutoff ->
@@ -303,8 +286,7 @@ next_task({Iterator, TargetTimeCutoff}) ->
             none
     end.
 
--spec dequeue_task(task_rank(), task_queue()) ->
-    {task() | outdated, task_queue()}.
+-spec dequeue_task(task_rank(), task_queue()) -> {task() | outdated, task_queue()}.
 dequeue_task(Rank = {TargetTime, _}, Queue = #task_queue{runnable = Runnable, runqueue = RQ}) ->
     {TaskID, RQLeft} = gb_trees:take(Rank, RQ),
     case maps:take(TaskID, Runnable) of
@@ -322,13 +304,11 @@ dequeue_task(Rank = {TargetTime, _}, Queue = #task_queue{runnable = Runnable, ru
             {outdated, Queue#task_queue{runqueue = RQLeft}}
     end.
 
--spec get_task_queue_size(task_queue()) ->
-    non_neg_integer().
+-spec get_task_queue_size(task_queue()) -> non_neg_integer().
 get_task_queue_size(#task_queue{runnable = Runnable}) ->
     maps:size(Runnable).
 
--spec update_reserved(state()) ->
-    state().
+-spec update_reserved(state()) -> state().
 update_reserved(State = #state{id = ID, quota_name = Quota, quota_share = QuotaShare}) ->
     TotalActiveTasks = get_active_task_count(State),
     TotalKnownTasks = TotalActiveTasks + get_waiting_task_count(State),
@@ -336,18 +316,21 @@ update_reserved(State = #state{id = ID, quota_name = Quota, quota_share = QuotaS
         client_id => ID,
         share => QuotaShare
     },
-    Reserved = mg_core_quota_worker:reserve(ClientOptions, TotalActiveTasks, TotalKnownTasks, Quota),
+    Reserved = mg_core_quota_worker:reserve(
+        ClientOptions,
+        TotalActiveTasks,
+        TotalKnownTasks,
+        Quota
+    ),
     NewState = State#state{quota_reserved = Reserved},
     ok = emit_reserved_beat(TotalActiveTasks, TotalKnownTasks, Reserved, NewState),
     NewState.
 
--spec get_active_task_count(state()) ->
-    non_neg_integer().
+-spec get_active_task_count(state()) -> non_neg_integer().
 get_active_task_count(#state{active_tasks = ActiveTasks}) ->
     maps:size(ActiveTasks).
 
--spec get_waiting_task_count(state()) ->
-    non_neg_integer().
+-spec get_waiting_task_count(state()) -> non_neg_integer().
 get_waiting_task_count(#state{waiting_tasks = WaitingTasks}) ->
     get_task_queue_size(WaitingTasks).
 
@@ -359,8 +342,7 @@ get_waiting_task_count(#state{waiting_tasks = WaitingTasks}) ->
 emit_beat(Handler, Beat) ->
     ok = mg_core_pulse:handle_beat(Handler, Beat).
 
--spec emit_new_tasks_beat(non_neg_integer(), state()) ->
-    ok.
+-spec emit_new_tasks_beat(non_neg_integer(), state()) -> ok.
 emit_new_tasks_beat(NewTasksCount, #state{pulse = Pulse, id = {Name, NS}}) ->
     emit_beat(Pulse, #mg_core_scheduler_new_tasks{
         namespace = NS,
@@ -381,8 +363,7 @@ emit_reserved_beat(Active, Total, Reserved, State) ->
         quota_reserved = Reserved
     }).
 
--spec maybe_update_reserved(state()) ->
-    state().
+-spec maybe_update_reserved(state()) -> state().
 maybe_update_reserved(#state{quota_reserved = undefined} = State) ->
     update_reserved(State);
 maybe_update_reserved(State) ->

@@ -22,49 +22,49 @@
 
 %% API
 %% OTP
--export_type([reason                    /0]).
--export_type([gen_timeout               /0]).
--export_type([gen_start_ret             /0]).
--export_type([gen_ref                   /0]).
--export_type([gen_reg_name              /0]).
--export_type([gen_server_from           /0]).
--export_type([gen_server_init_ret       /1]).
+-export_type([reason/0]).
+-export_type([gen_timeout/0]).
+-export_type([gen_start_ret/0]).
+-export_type([gen_ref/0]).
+-export_type([gen_reg_name/0]).
+-export_type([gen_server_from/0]).
+-export_type([gen_server_init_ret/1]).
 -export_type([gen_server_handle_call_ret/1]).
 -export_type([gen_server_handle_cast_ret/1]).
 -export_type([gen_server_handle_info_ret/1]).
 -export_type([gen_server_code_change_ret/1]).
--export_type([supervisor_ret            /0]).
+-export_type([supervisor_ret/0]).
 -export([gen_reg_name_to_ref/1]).
 -export([gen_reg_name_to_pid/1]).
--export([gen_ref_to_pid     /1]).
--export([msg_queue_len      /1]).
--export([check_overload     /2]).
+-export([gen_ref_to_pid/1]).
+-export([msg_queue_len/1]).
+-export([check_overload/2]).
 
--export_type([supervisor_old_spec      /0]).
--export_type([supervisor_old_flags     /0]).
+-export_type([supervisor_old_spec/0]).
+-export_type([supervisor_old_flags/0]).
 -export_type([supervisor_old_child_spec/0]).
--export([supervisor_old_spec      /1]).
--export([supervisor_old_flags     /1]).
+-export([supervisor_old_spec/1]).
+-export([supervisor_old_flags/1]).
 -export([supervisor_old_child_spec/1]).
 
 %% Other
 -export_type([mod_opts/0]).
 -export_type([mod_opts/1]).
--export([apply_mod_opts            /2]).
--export([apply_mod_opts            /3]).
--export([apply_mod_opts_if_defined /3]).
--export([apply_mod_opts_if_defined /4]).
--export([separate_mod_opts         /1]).
--export([separate_mod_opts         /2]).
+-export([apply_mod_opts/2]).
+-export([apply_mod_opts/3]).
+-export([apply_mod_opts_if_defined/3]).
+-export([apply_mod_opts_if_defined/4]).
+-export([separate_mod_opts/1]).
+-export([separate_mod_opts/2]).
 
--export([throw_if_error    /1]).
--export([throw_if_error    /2]).
+-export([throw_if_error/1]).
+-export([throw_if_error/2]).
 -export([throw_if_undefined/2]).
--export([exit_if_undefined /2]).
+-export([exit_if_undefined/2]).
 
--export_type([exception   /0]).
--export([raise            /1]).
--export([format_exception /1]).
+-export_type([exception/0]).
+-export([raise/1]).
+-export([format_exception/1]).
 
 -export([join/2]).
 -export([partition/2]).
@@ -80,92 +80,79 @@
 %% OTP
 %%
 -type reason() ::
-      normal
+    normal
     | shutdown
     | {shutdown, _}
-    | _
-.
+    | _.
 -type gen_timeout() ::
-      'hibernate'
-    | timeout()
-.
+    'hibernate'
+    | timeout().
 
 -type gen_start_ret() ::
-      {ok, pid()}
+    {ok, pid()}
     | ignore
-    | {error, _}
-.
+    | {error, _}.
 
 -type gen_ref() ::
-      atom()
+    atom()
     | {atom(), node()}
     | {global, atom()}
     | {via, atom(), term()}
-    | pid()
-.
+    | pid().
 -type gen_reg_name() ::
-      {local , atom()}
+    {local, atom()}
     | {global, term()}
-    | {via, module(), term()}
-.
+    | {via, module(), term()}.
 
 -type gen_server_from() :: {pid(), _}.
 
 -type gen_server_init_ret(State) ::
-       ignore
-    | {ok  , State   }
+    ignore
+    | {ok, State}
     | {stop, reason()}
-    | {ok  , State   , gen_timeout()}
-.
+    | {ok, State, gen_timeout()}.
 
 -type gen_server_handle_call_ret(State) ::
-      {noreply, State   }
-    | {noreply, State   , gen_timeout()}
-    | {reply  , _Reply  , State        }
-    | {stop   , reason(), State        }
-    | {reply  , _Reply  , State        , gen_timeout()}
-    | {stop   , reason(), _Reply       , State        }
-.
+    {noreply, State}
+    | {noreply, State, gen_timeout()}
+    | {reply, _Reply, State}
+    | {stop, reason(), State}
+    | {reply, _Reply, State, gen_timeout()}
+    | {stop, reason(), _Reply, State}.
 
 -type gen_server_handle_cast_ret(State) ::
-      {noreply, State   }
-    | {noreply, State   , gen_timeout()}
-    | {stop   , reason(), State        }
-.
+    {noreply, State}
+    | {noreply, State, gen_timeout()}
+    | {stop, reason(), State}.
 
 -type gen_server_handle_info_ret(State) ::
-      {noreply, State   }
-    | {noreply, State   , gen_timeout()}
-    | {stop   , reason(), State        }
-.
+    {noreply, State}
+    | {noreply, State, gen_timeout()}
+    | {stop, reason(), State}.
 
 -type gen_server_code_change_ret(State) ::
-      {ok   , State}
-    | {error, _    }
-.
+    {ok, State}
+    | {error, _}.
 
 -type supervisor_ret() ::
-      ignore
-    | {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}
-.
+    ignore
+    | {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 
--spec
-gen_reg_name_to_ref(gen_reg_name()) -> gen_ref().
-gen_reg_name_to_ref({local, Name} ) -> Name;
-gen_reg_name_to_ref(V={global, _} ) -> V;
-gen_reg_name_to_ref(V={via, _, _} ) -> V. % Is this correct?
+-spec gen_reg_name_to_ref(gen_reg_name()) -> gen_ref().
+gen_reg_name_to_ref({local, Name}) -> Name;
+gen_reg_name_to_ref(V = {global, _}) -> V;
+% Is this correct?
+gen_reg_name_to_ref(V = {via, _, _}) -> V.
 
--spec gen_reg_name_to_pid(gen_reg_name()) ->
-    pid() | undefined.
+-spec gen_reg_name_to_pid(gen_reg_name()) -> pid() | undefined.
 gen_reg_name_to_pid({global, Name}) ->
     global:whereis_name(Name);
 gen_reg_name_to_pid({via, Module, Name}) ->
     Module:whereis_name(Name);
-gen_reg_name_to_pid({local, Name})  ->
+gen_reg_name_to_pid({local, Name}) ->
     erlang:whereis(Name).
 
--spec gen_ref_to_pid(gen_ref()) ->
-    pid() | undefined.
+-spec gen_ref_to_pid(gen_ref()) -> pid() | undefined.
 gen_ref_to_pid(Name) when is_atom(Name) ->
     erlang:whereis(Name);
 gen_ref_to_pid({Name, Node}) when is_atom(Name) andalso is_atom(Node) ->
@@ -177,23 +164,24 @@ gen_ref_to_pid({via, Module, Name}) ->
 gen_ref_to_pid(Pid) when is_pid(Pid) ->
     Pid.
 
--spec msg_queue_len(gen_ref()) ->
-    non_neg_integer() | undefined.
+-spec msg_queue_len(gen_ref()) -> non_neg_integer() | undefined.
 msg_queue_len(Ref) ->
     Pid = exit_if_undefined(gen_ref_to_pid(Ref), noproc),
-    {message_queue_len, Len} = exit_if_undefined(erlang:process_info(Pid, message_queue_len), noproc),
+    {message_queue_len, Len} = exit_if_undefined(
+        erlang:process_info(Pid, message_queue_len),
+        noproc
+    ),
     Len.
 
--spec check_overload(gen_ref(), pos_integer()) ->
-    ok | no_return().
+-spec check_overload(gen_ref(), pos_integer()) -> ok | no_return().
 check_overload(Ref, Limit) ->
     case msg_queue_len(Ref) < Limit of
-        true  -> ok;
+        true -> ok;
         false -> exit(overload)
     end.
 
--type supervisor_old_spec()       :: {supervisor_old_flags(), supervisor_old_child_spec()}.
--type supervisor_old_flags()      :: _TODO.
+-type supervisor_old_spec() :: {supervisor_old_flags(), supervisor_old_child_spec()}.
+-type supervisor_old_flags() :: _TODO.
 -type supervisor_old_child_spec() :: _TODO.
 
 -spec supervisor_old_spec({supervisor:sup_flags(), [supervisor:child_spec()]}) ->
@@ -201,21 +189,19 @@ check_overload(Ref, Limit) ->
 supervisor_old_spec({Flags, ChildSpecs}) ->
     {supervisor_old_flags(Flags), lists:map(fun supervisor_old_child_spec/1, ChildSpecs)}.
 
--spec supervisor_old_flags(supervisor:sup_flags()) ->
-    supervisor_old_flags().
+-spec supervisor_old_flags(supervisor:sup_flags()) -> supervisor_old_flags().
 supervisor_old_flags(Flags = #{strategy := Strategy}) ->
     {Strategy, maps:get(intensity, Flags, 1), maps:get(period, Flags, 5)}.
 
--spec supervisor_old_child_spec(supervisor:child_spec()) ->
-    supervisor_old_child_spec().
+-spec supervisor_old_child_spec(supervisor:child_spec()) -> supervisor_old_child_spec().
 supervisor_old_child_spec(ChildSpec = #{id := ChildID, start := Start = {M, _, _}}) ->
     {
         ChildID,
         Start,
-        maps:get(restart , ChildSpec, permanent),
-        maps:get(shutdown, ChildSpec, 5000     ),
-        maps:get(type    , ChildSpec, worker   ),
-        maps:get(modules , ChildSpec, [M]      )
+        maps:get(restart, ChildSpec, permanent),
+        maps:get(shutdown, ChildSpec, 5000),
+        maps:get(type, ChildSpec, worker),
+        maps:get(modules, ChildSpec, [M])
     }.
 
 %%
@@ -224,24 +210,20 @@ supervisor_old_child_spec(ChildSpec = #{id := ChildID, start := Start = {M, _, _
 -type mod_opts() :: mod_opts(term()).
 -type mod_opts(Options) :: {module(), Options} | module().
 
--spec apply_mod_opts(mod_opts(), atom()) ->
-    _Result.
+-spec apply_mod_opts(mod_opts(), atom()) -> _Result.
 apply_mod_opts(ModOpts, Function) ->
     apply_mod_opts(ModOpts, Function, []).
 
--spec apply_mod_opts(mod_opts(), atom(), list(_Arg)) ->
-    _Result.
+-spec apply_mod_opts(mod_opts(), atom(), list(_Arg)) -> _Result.
 apply_mod_opts(ModOpts, Function, Args) ->
     {Mod, Arg} = separate_mod_opts(ModOpts),
     erlang:apply(Mod, Function, [Arg | Args]).
 
--spec apply_mod_opts_if_defined(mod_opts(), atom(), _Default) ->
-    _Result.
+-spec apply_mod_opts_if_defined(mod_opts(), atom(), _Default) -> _Result.
 apply_mod_opts_if_defined(ModOpts, Function, Default) ->
     apply_mod_opts_if_defined(ModOpts, Function, Default, []).
 
--spec apply_mod_opts_if_defined(mod_opts(), atom(), _Default, list(_Arg)) ->
-    _Result.
+-spec apply_mod_opts_if_defined(mod_opts(), atom(), _Default, list(_Arg)) -> _Result.
 apply_mod_opts_if_defined(ModOpts, Function, Default, Args) ->
     {Mod, Arg} = separate_mod_opts(ModOpts),
     FunctionArgs = [Arg | Args],
@@ -253,8 +235,7 @@ apply_mod_opts_if_defined(ModOpts, Function, Default, Args) ->
             Default
     end.
 
--spec maybe_load_module(module()) ->
-    ok.
+-spec maybe_load_module(module()) -> ok.
 maybe_load_module(Mod) ->
     case code:ensure_loaded(Mod) of
         {module, Mod} ->
@@ -263,21 +244,19 @@ maybe_load_module(Mod) ->
             logger:warning("An error occured, while loading module ~p, reason: ~p", [Mod, Reason])
     end.
 
--spec separate_mod_opts(mod_opts()) ->
-    {module(), _Arg}.
+-spec separate_mod_opts(mod_opts()) -> {module(), _Arg}.
 separate_mod_opts(ModOpts) ->
     separate_mod_opts(ModOpts, undefined).
 
--spec separate_mod_opts(mod_opts(Defaults), Defaults) ->
-    {module(), Defaults}.
-separate_mod_opts(ModOpts={_, _}, _) ->
+-spec separate_mod_opts(mod_opts(Defaults), Defaults) -> {module(), Defaults}.
+separate_mod_opts(ModOpts = {_, _}, _) ->
     ModOpts;
 separate_mod_opts(Mod, Default) ->
     {Mod, Default}.
 
 -spec throw_if_error
-    (ok             ) -> ok;
-    ({ok   , Result}) -> Result;
+    (ok) -> ok;
+    ({ok, Result}) -> Result;
     ({error, _Error}) -> no_return().
 throw_if_error(ok) ->
     ok;
@@ -287,8 +266,8 @@ throw_if_error({error, Error}) ->
     erlang:throw(Error).
 
 -spec throw_if_error
-    (ok             , _ExceptionTag) -> ok;
-    ({ok   , Result}, _ExceptionTag) -> Result;
+    (ok, _ExceptionTag) -> ok;
+    ({ok, Result}, _ExceptionTag) -> Result;
     ({error, _Error}, _ExceptionTag) -> no_return().
 throw_if_error(ok, _) ->
     ok;
@@ -299,15 +278,13 @@ throw_if_error(error, Exception) ->
 throw_if_error({error, Error}, Exception) ->
     erlang:throw({Exception, Error}).
 
--spec throw_if_undefined(Result, _Reason) ->
-    Result | no_return().
+-spec throw_if_undefined(Result, _Reason) -> Result | no_return().
 throw_if_undefined(undefined, Reason) ->
     erlang:throw(Reason);
 throw_if_undefined(Value, _) ->
     Value.
 
--spec exit_if_undefined(Result, _Reason) ->
-    Result.
+-spec exit_if_undefined(Result, _Reason) -> Result.
 exit_if_undefined(undefined, Reason) ->
     erlang:exit(Reason);
 exit_if_undefined(Value, _) ->
@@ -315,65 +292,61 @@ exit_if_undefined(Value, _) ->
 
 -type exception() :: {exit | error | throw, term(), list()}.
 
--spec raise(exception()) ->
-    no_return().
+-spec raise(exception()) -> no_return().
 raise({Class, Reason, Stacktrace}) ->
     erlang:raise(Class, Reason, Stacktrace).
 
--spec format_exception(exception()) ->
-    iodata().
+-spec format_exception(exception()) -> iodata().
 format_exception({Class, Reason, Stacktrace}) ->
-    io_lib:format("~s:~p ~s", [Class, Reason, genlib_format:format_stacktrace(Stacktrace, [newlines])]).
+    io_lib:format("~s:~p ~s", [
+        Class,
+        Reason,
+        genlib_format:format_stacktrace(Stacktrace, [newlines])
+    ]).
 
+-spec join(D, list(E)) -> list(D | E).
+join(_, []) -> [];
+join(_, [H]) -> H;
+join(Delim, [H | T]) -> [H, Delim, join(Delim, T)].
 
--spec join(D, list(E)) ->
-    list(D | E).
-join(_    , []   ) -> [];
-join(_    , [H]  ) ->  H;
-join(Delim, [H|T]) -> [H, Delim, join(Delim, T)].
-
--spec partition([T], [{Owner, Weight}, ...]) ->
-    #{Owner => [T]} when Weight :: non_neg_integer().
+-spec partition([T], [{Owner, Weight}, ...]) -> #{Owner => [T]} when Weight :: non_neg_integer().
 partition(L, Owners = [_ | _]) ->
-    WeightSum = lists:foldl(fun ({_, W}, Acc) -> Acc + W end, 0, Owners),
+    WeightSum = lists:foldl(fun({_, W}, Acc) -> Acc + W end, 0, Owners),
     partition(L, Owners, erlang:max(WeightSum, 1), #{}).
 
--spec partition([T], [{Owner, Weight}, ...], pos_integer(), Acc) ->
-    Acc when Acc :: #{Owner => [T]}, Weight :: non_neg_integer().
+-spec partition([T], [{Owner, Weight}, ...], pos_integer(), Acc) -> Acc when
+    Acc :: #{Owner => [T]}, Weight :: non_neg_integer().
 partition([V | Vs], Owners, WeightSum, Acc) ->
     Owner = pick(rand:uniform(WeightSum), Owners),
-    Acc1 = maps:update_with(Owner, fun (Share) -> [V | Share] end, [V], Acc),
+    Acc1 = maps:update_with(Owner, fun(Share) -> [V | Share] end, [V], Acc),
     partition(Vs, Owners, WeightSum, Acc1);
 partition([], _, _, Acc) ->
     Acc.
 
--spec pick(pos_integer(), [{Owner, non_neg_integer()}, ...]) ->
-    Owner.
+-spec pick(pos_integer(), [{Owner, non_neg_integer()}, ...]) -> Owner.
 pick(Pick, [{Owner, Weight} | _]) when Pick - Weight =< 0 ->
     Owner;
 pick(_, [{Owner, _}]) ->
-    Owner; % pick at least last one
+    % pick at least last one
+    Owner;
 pick(Pick, [{_, Weight} | T]) ->
     pick(Pick - Weight, T).
 
--spec lists_compact(list(T)) ->
-    list(T).
+-spec lists_compact(list(T)) -> list(T).
 lists_compact(List) ->
     lists:filter(
         fun
             (undefined) -> false;
-            (_        ) -> true
+            (_) -> true
         end,
         List
     ).
 
--spec concatenate_namespaces(mg_core:ns(), mg_core:ns()) ->
-    mg_core:ns().
+-spec concatenate_namespaces(mg_core:ns(), mg_core:ns()) -> mg_core:ns().
 concatenate_namespaces(NamespaceA, NamespaceB) ->
     <<NamespaceA/binary, "_", NamespaceB/binary>>.
 
--spec take_defined([T | undefined]) ->
-    T | undefined.
+-spec take_defined([T | undefined]) -> T | undefined.
 take_defined([]) ->
     undefined;
 take_defined([undefined | Rest]) ->

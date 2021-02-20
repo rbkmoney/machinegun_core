@@ -19,23 +19,21 @@
 -export([pulse/2]).
 
 -type producer() ::
-      client
+    client
     | registry_server
     | session_keeper
     | zombie_reaper
     | discovery_server
-    | presence_session
-    .
+    | presence_session.
 
 -type beat() ::
     {consuela,
-          {client           , consuela_client:beat()}
-        | {registry_server  , consuela_registry_server:beat()}
-        | {session_keeper   , consuela_session_keeper:beat()}
-        | {zombie_reaper    , consuela_zombie_reaper:beat()}
-        | {discovery_server , consuela_discovery_server:beat()}
-        | {presence_session , consuela_presence_session:beat()}
-    }.
+        {client, consuela_client:beat()}
+        | {registry_server, consuela_registry_server:beat()}
+        | {session_keeper, consuela_session_keeper:beat()}
+        | {zombie_reaper, consuela_zombie_reaper:beat()}
+        | {discovery_server, consuela_discovery_server:beat()}
+        | {presence_session, consuela_presence_session:beat()}}.
 
 -export_type([beat/0]).
 
@@ -43,8 +41,7 @@
 
 %%
 
--spec pulse(producer(), mg_core_pulse:handler()) ->
-    {module(), _Opts}.
+-spec pulse(producer(), mg_core_pulse:handler()) -> {module(), _Opts}.
 
 pulse(Producer, Handler) ->
     {?MODULE, {Producer, Handler}}.
@@ -52,12 +49,12 @@ pulse(Producer, Handler) ->
 %%
 
 -spec handle_beat
-    (consuela_client:beat()            , {client           , mg_core_pulse:handler()}) -> _;
-    (consuela_registry_server:beat()   , {registry_server  , mg_core_pulse:handler()}) -> _;
-    (consuela_session_keeper:beat()    , {session_keeper   , mg_core_pulse:handler()}) -> _;
-    (consuela_zombie_reaper:beat()     , {zombie_reaper    , mg_core_pulse:handler()}) -> _;
-    (consuela_discovery_server:beat()  , {discovery_server , mg_core_pulse:handler()}) -> _;
-    (consuela_presence_session:beat()  , {presence_session , mg_core_pulse:handler()}) -> _.
+    (consuela_client:beat(), {client, mg_core_pulse:handler()}) -> _;
+    (consuela_registry_server:beat(), {registry_server, mg_core_pulse:handler()}) -> _;
+    (consuela_session_keeper:beat(), {session_keeper, mg_core_pulse:handler()}) -> _;
+    (consuela_zombie_reaper:beat(), {zombie_reaper, mg_core_pulse:handler()}) -> _;
+    (consuela_discovery_server:beat(), {discovery_server, mg_core_pulse:handler()}) -> _;
+    (consuela_presence_session:beat(), {presence_session, mg_core_pulse:handler()}) -> _.
 
 handle_beat(Beat, {Producer, Handler}) ->
     mg_core_pulse:handle_beat(Handler, {consuela, {Producer, Beat}}).

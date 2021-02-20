@@ -19,14 +19,14 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% tests descriptions
--export([all           /0]).
--export([groups        /0]).
+-export([all/0]).
+-export([groups/0]).
 -export([init_per_suite/1]).
--export([end_per_suite /1]).
+-export([end_per_suite/1]).
 
 %% tests
--export([add_events_test                   /1]).
--export([get_unexisted_event_test          /1]).
+-export([add_events_test/1]).
+-export([get_unexisted_event_test/1]).
 -export([not_idempotent_add_get_events_test/1]).
 
 %% Pulse
@@ -36,18 +36,16 @@
 %% tests descriptions
 %%
 -type group_name() :: atom().
--type test_name () :: atom().
--type config    () :: [{atom(), _}].
+-type test_name() :: atom().
+-type config() :: [{atom(), _}].
 
--spec all() ->
-    [test_name()].
+-spec all() -> [test_name()].
 all() ->
     [
         {group, main}
     ].
 
--spec groups() ->
-    [{group_name(), list(_), test_name()}].
+-spec groups() -> [{group_name(), list(_), test_name()}].
 groups() ->
     [
         {main, [sequence], [
@@ -60,23 +58,23 @@ groups() ->
 %%
 %% starting/stopping
 %%
--spec init_per_suite(config()) ->
-    config().
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_events_sink_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
     Pid = start_event_sink(event_sink_options()),
     true = erlang:unlink(Pid),
-    {Events, _} = mg_core_events:generate_events_with_range([{#{}, Body} || Body <- [1, 2, 3]], undefined),
-    [{apps, Apps}, {pid, Pid}, {events, Events}| C].
+    {Events, _} = mg_core_events:generate_events_with_range(
+        [{#{}, Body} || Body <- [1, 2, 3]],
+        undefined
+    ),
+    [{apps, Apps}, {pid, Pid}, {events, Events} | C].
 
--spec end_per_suite(config()) ->
-    ok.
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     ok = proc_lib:stop(?config(pid, C)),
     mg_core_ct_helper:stop_applications(?config(apps, C)).
-
 
 %%
 %% tests
@@ -85,25 +83,25 @@ end_per_suite(C) ->
 -define(SOURCE_NS, <<"source_ns">>).
 -define(SOURCE_ID, <<"source_id">>).
 
--spec add_events_test(config()) ->
-    _.
+-spec add_events_test(config()) -> _.
 add_events_test(C) ->
     ?assertEqual(ok, add_events(C)).
 
--spec get_unexisted_event_test(config()) ->
-    _.
+-spec get_unexisted_event_test(config()) -> _.
 get_unexisted_event_test(_C) ->
-    [] = mg_core_events_sink_machine:get_history(event_sink_options(), ?ES_ID, {42, undefined, forward}).
+    [] = mg_core_events_sink_machine:get_history(
+        event_sink_options(),
+        ?ES_ID,
+        {42, undefined, forward}
+    ).
 
--spec not_idempotent_add_get_events_test(config()) ->
-    _.
+-spec not_idempotent_add_get_events_test(config()) -> _.
 not_idempotent_add_get_events_test(C) ->
     ?assertEqual(ok, add_events(C)),
-    ConfigEvents =
-        [
-            #{event => Event, source_ns => ?SOURCE_NS, source_id => ?SOURCE_ID}
-            || Event <- ?config(events, C)
-        ],
+    ConfigEvents = [
+        #{event => Event, source_ns => ?SOURCE_NS, source_id => ?SOURCE_ID}
+        || Event <- ?config(events, C)
+    ],
     ExpectedEvents = lists:zip(
         lists:seq(1, erlang:length(?config(events, C)) * 2),
         ConfigEvents ++ ConfigEvents
@@ -114,22 +112,29 @@ not_idempotent_add_get_events_test(C) ->
 %% utils
 %%
 
--spec add_events(config()) ->
-    _.
+-spec add_events(config()) -> _.
 add_events(C) ->
-    mg_core_events_sink_machine:add_events(event_sink_options(), ?SOURCE_NS, ?SOURCE_ID,
-        ?config(events, C), null, mg_core_deadline:default()).
+    mg_core_events_sink_machine:add_events(
+        event_sink_options(),
+        ?SOURCE_NS,
+        ?SOURCE_ID,
+        ?config(events, C),
+        null,
+        mg_core_deadline:default()
+    ).
 
--spec get_history(config()) ->
-    _.
+-spec get_history(config()) -> _.
 get_history(_C) ->
     HRange = {undefined, undefined, forward},
     % _ = ct:pal("~p", [PreparedEvents]),
-    EventsSinkEvents = mg_core_events_sink_machine:get_history(event_sink_options(), ?ES_ID, HRange),
+    EventsSinkEvents = mg_core_events_sink_machine:get_history(
+        event_sink_options(),
+        ?ES_ID,
+        HRange
+    ),
     [{ID, Body} || #{id := ID, body := Body} <- EventsSinkEvents].
 
--spec start_event_sink(mg_core_events_sink_machine:ns_options()) ->
-    pid().
+-spec start_event_sink(mg_core_events_sink_machine:ns_options()) -> pid().
 start_event_sink(Options) ->
     mg_core_utils:throw_if_error(
         mg_core_utils_supervisor_wrapper:start_link(
@@ -138,21 +143,19 @@ start_event_sink(Options) ->
         )
     ).
 
--spec event_sink_options() ->
-    mg_core_events_sink_machine:ns_options().
+-spec event_sink_options() -> mg_core_events_sink_machine:ns_options().
 event_sink_options() ->
     #{
-        name                   => machine,
-        machine_id             => ?ES_ID,
-        namespace              => ?ES_ID,
-        storage                => mg_core_storage_memory,
-        worker                 => #{registry => mg_core_procreg_gproc},
-        pulse                  => ?MODULE,
+        name => machine,
+        machine_id => ?ES_ID,
+        namespace => ?ES_ID,
+        storage => mg_core_storage_memory,
+        worker => #{registry => mg_core_procreg_gproc},
+        pulse => ?MODULE,
         duplicate_search_batch => 1000,
-        events_storage         => mg_core_storage_memory
+        events_storage => mg_core_storage_memory
     }.
 
--spec handle_beat(_, mg_core_pulse:beat()) ->
-    ok.
+-spec handle_beat(_, mg_core_pulse:beat()) -> ok.
 handle_beat(_, Beat) ->
     ct:pal("~p", [Beat]).

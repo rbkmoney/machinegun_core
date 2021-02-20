@@ -16,30 +16,27 @@
 
 -module(mg_core_gen_squad_pulse).
 
--callback handle_beat(_Options, beat()) ->
-    _.
+-callback handle_beat(_Options, beat()) -> _.
 
 %% TODO remove weak circular deps
 -type beat() ::
-    {rank,
-        {changed, mg_core_gen_squad:rank()}} |
-    {{member, pid()},
-        added |
-        {refreshed, mg_core_gen_squad:member()} |
-        {removed, mg_core_gen_squad:member(), _Reason :: lost | {down, _}}} |
-    {{broadcast, mg_core_gen_squad_heart:payload()},
-        {sent, [pid()], _Ctx} |
-        received} |
-    {{timer, reference()},
-        {started, _Timeout :: non_neg_integer(), _Msg} |
-        cancelled |
-        {fired, _Msg}} |
-    {{monitor, reference()},
-        {started, pid()} |
-        cancelled |
-        {fired, pid(), _Reason}} |
-    {unexpected,
-        {{call, _From} | cast | info, _Payload}}.
+    {rank, {changed, mg_core_gen_squad:rank()}}
+    | {{member, pid()},
+        added
+        | {refreshed, mg_core_gen_squad:member()}
+        | {removed, mg_core_gen_squad:member(), _Reason :: lost | {down, _}}}
+    | {{broadcast, mg_core_gen_squad_heart:payload()},
+        {sent, [pid()], _Ctx}
+        | received}
+    | {{timer, reference()},
+        {started, _Timeout :: non_neg_integer(), _Msg}
+        | cancelled
+        | {fired, _Msg}}
+    | {{monitor, reference()},
+        {started, pid()}
+        | cancelled
+        | {fired, pid(), _Reason}}
+    | {unexpected, {{call, _From} | cast | info, _Payload}}.
 
 -type handler() :: mg_core_utils:mod_opts().
 
@@ -50,8 +47,7 @@
 
 %%
 
--spec handle_beat(handler(), any()) ->
-    _.
+-spec handle_beat(handler(), any()) -> _.
 handle_beat(Handler, Beat) ->
     {Mod, Options} = mg_core_utils:separate_mod_opts(Handler),
     Mod:handle_beat(Options, Beat).

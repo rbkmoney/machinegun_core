@@ -44,52 +44,45 @@
 
 %% Names and references
 
--callback ref(procreg_options(), name()) ->
-    ref().
+-callback ref(procreg_options(), name()) -> ref().
 
--callback reg_name(procreg_options(), name()) ->
-    reg_name().
+-callback reg_name(procreg_options(), name()) -> reg_name().
 
--callback select(procreg_options(), name_pattern()) ->
-    [{name(), pid()}].
+-callback select(procreg_options(), name_pattern()) -> [{name(), pid()}].
 
--callback call(procreg_options(), ref(), _Call, timeout()) ->
-    _Reply.
+-callback call(procreg_options(), ref(), _Call, timeout()) -> _Reply.
 
 -type start_link_ret() ::
     {ok, pid()} | {error, term()}.
 
--callback start_link(procreg_options(), reg_name(), module(), _Args, list()) ->
-    start_link_ret().
+-callback start_link(procreg_options(), reg_name(), module(), _Args, list()) -> start_link_ret().
 
 %%
 
--spec ref(options(), name()) ->
-    ref().
+-spec ref(options(), name()) -> ref().
 ref(Options, Name) ->
     mg_core_utils:apply_mod_opts(Options, ref, [Name]).
 
--spec reg_name(options(), name()) ->
-    reg_name().
+-spec reg_name(options(), name()) -> reg_name().
 reg_name(Options, Name) ->
     mg_core_utils:apply_mod_opts(Options, reg_name, [Name]).
 
--spec select(options(), name_pattern()) ->
-    [{name(), pid()}].
+-spec select(options(), name_pattern()) -> [{name(), pid()}].
 select(Options, NamePattern) ->
     mg_core_utils:apply_mod_opts(Options, select, [NamePattern]).
 
--spec call(options(), name(), _Call) ->
-    _Reply.
+-spec call(options(), name(), _Call) -> _Reply.
 call(Options, Name, Call) ->
     call(Options, Name, Call, 5000).
 
--spec call(options(), name(), _Call, timeout()) ->
-    _Reply.
+-spec call(options(), name(), _Call, timeout()) -> _Reply.
 call(Options, Name, Call, Timeout) ->
     mg_core_utils:apply_mod_opts(Options, call, [ref(Options, Name), Call, Timeout]).
 
--spec start_link(options(), name(), module(), _Args, list()) ->
-    start_link_ret().
+-spec start_link(options(), name(), module(), _Args, list()) -> start_link_ret().
 start_link(Options, Name, Module, Args, Opts) ->
-    mg_core_utils:apply_mod_opts(Options, start_link, [reg_name(Options, Name), Module, Args, Opts]).
+    mg_core_utils:apply_mod_opts(
+        Options,
+        start_link,
+        [reg_name(Options, Name), Module, Args, Opts]
+    ).
