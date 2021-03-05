@@ -48,6 +48,7 @@
 %%%
 -module(mg_core_storage_riak).
 -include_lib("riakc/include/riakc.hrl").
+-include_lib("machinegun_core/include/pulse.hrl").
 
 %% mg_core_storage callbacks
 -behaviour(mg_core_storage).
@@ -106,6 +107,9 @@
     metrics_api => folsom | exometer
 }.
 
+%% Duration is measured in native units
+-type duration() :: non_neg_integer().
+
 %% TODO: Replace by deadline
 -define(TAKE_CLIENT_TIMEOUT, 30000).
 
@@ -159,7 +163,11 @@ child_spec(Options, ChildID) ->
 do_request(Options, Request) ->
     ClientRef = take_client(Options),
     try
+        StartTimestamp = erlang:monotonic_time(),
+        ok = emit_beat_start(Request, Options),
         Result = try_do_request(Options, ClientRef, Request),
+        Duration = erlang:monotonic_time() - StartTimestamp,
+        ok = emit_beat_finish(Request, Options, Duration),
         ok = return_client(Options, ClientRef, ok),
         Result
     catch
@@ -551,3 +559,47 @@ pool_name(#{name := Name}) ->
 -spec term_to_atom(term()) -> atom().
 term_to_atom(Term) ->
     erlang:binary_to_atom(base64:encode(erlang:term_to_binary(Term)), latin1).
+
+%%
+%% logging
+%%
+
+-spec emit_beat_start(mg_core_storage:request(), options()) -> ok.
+emit_beat_start({get, _}, #{pulse := Handler, name := Name}) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_get_start{
+        name = Name
+    });
+emit_beat_start({put, _, _, _, _}, #{pulse := Handler, name := Name}) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_put_start{
+        name = Name
+    });
+emit_beat_start({search, _}, #{pulse := Handler, name := Name}) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_search_start{
+        name = Name
+    });
+emit_beat_start({delete, _, _}, #{pulse := Handler, name := Name}) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_delete_start{
+        name = Name
+    }).
+
+-spec emit_beat_finish(mg_core_storage:request(), options(), duration()) -> ok.
+emit_beat_finish({get, _}, #{pulse := Handler, name := Name}, Duration) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_get_finish{
+        name = Name,
+        duration = Duration
+    });
+emit_beat_finish({put, _, _, _, _}, #{pulse := Handler, name := Name}, Duration) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_put_finish{
+        name = Name,
+        duration = Duration
+    });
+emit_beat_finish({search, _}, #{pulse := Handler, name := Name}, Duration) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_search_finish{
+        name = Name,
+        duration = Duration
+    });
+emit_beat_finish({delete, _, _}, #{pulse := Handler, name := Name}, Duration) ->
+    ok = mg_core_pulse:handle_beat(Handler, #mg_core_riak_client_delete_finish{
+        name = Name,
+        duration = Duration
+    }).
