@@ -759,9 +759,10 @@ add_delayed_actions(NewDelayedActions, #{delayed_actions := OldDelayedActions} =
 
 -spec add_delayed_action(Field :: atom(), Value :: term(), delayed_actions()) -> delayed_actions().
 %% Tag
-add_delayed_action(add_tag, undefined, DelayedActions) ->
-    DelayedActions;
 add_delayed_action(add_tag, Tag, DelayedActions) ->
+    % NOTE
+    % Deliberately discarding existing tag action here, even if, say, ongoing repair does not tag.
+    % This is kind of a hack, yet this way repairs are more useful in practice.
     DelayedActions#{add_tag => Tag};
 %% Timer
 add_delayed_action(new_timer, unchanged, DelayedActions) ->
