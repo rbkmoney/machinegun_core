@@ -8,6 +8,8 @@ on:
 jobs:
   test-build:
     runs-on: ubuntu-latest
+    env:
+      DOCKER_RUN_OPTS: "--env REBAR_CACHE_DIR=/tmp/rebar3"
     steps:
     - name: Checkout source code
       uses: actions/checkout@v2
