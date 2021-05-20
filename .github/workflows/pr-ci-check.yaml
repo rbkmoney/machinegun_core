@@ -1,0 +1,44 @@
+name: Pull Request Check
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Cache rebar plugins
+      uses: actions/cache@v2
+      with:
+        path: "_build/default/plugins"
+        key: plugins-${{ hashFiles('Makefile', 'rebar.config', 'rebar.lock') }}
+    - name: Cache builded deps
+      uses: actions/cache@v2
+      with:
+        path: "_build/default/lib"
+        key: deps-${{ hashFiles('Makefile', 'rebar.config', 'rebar.lock') }}
+    - name: Cache dialyzer files
+      uses: actions/cache@v2
+      with:
+        path: "_build/default/*_plt"
+        key: plt-${{ hashFiles('Makefile') }}-${{ hashFiles('rebar.lock') }}
+        restore-keys: |
+          plt-${{ hashFiles('Makefile') }}-
+    - name: Prepare submodules
+      run: make submodules
+    - name: Compile
+      run: make wc_compile
+    - name: Check format
+      run: make wc_check_format
+    - name: Check xref
+      run: make wc_xref
+    - name: Check linting
+      run: make wc_lint
+    - name: Dialyze
+      run: make wc_dialyze
+    - name: Run tests
+      run: make wdeps_test
