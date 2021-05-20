@@ -1,0 +1,48 @@
+name: Pull Request Check
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  run-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Cache rebar cache
+      uses: actions/cache@v2
+      with:
+        path: "~/.cache/rebar3"
+        key: rebar-global-cache-${{ hashFiles('Makefile') }}
+    - name: Cache deps
+      uses: actions/cache@v2
+      with:
+        path: "_build/default/lib"
+        key: deps-${{ hashFiles('Makefile', 'rebar.config', 'rebar.lock') }}
+    - name: Cache dialyzer cache
+      uses: actions/cache@v2
+      with:
+        path: "_build/default/*_plt"
+        key: plt-${{ hashFiles('Makefile') }}-${{ hashFiles('rebar.lock') }}
+        restore-keys: |
+          plt-${{ hashFiles('Makefile') }}-
+    - name: Prepare submodules
+      run: make submodules
+    - name: Prepare rebar cache directory
+      run: mkdir -p ~/.cache
+    - name: Get env
+      run: docker-compose -v
+    - name: Compile
+      run: make wc_compile
+    - name: Check format
+      run: make wc_check_format
+    - name: Check xref
+      run: make wc_xref
+    - name: Check linting
+      run: make wc_lint
+    - name: Dialyze
+      run: make wc_dialyze
+    - name: Run tests
+      run: make wdeps_test
