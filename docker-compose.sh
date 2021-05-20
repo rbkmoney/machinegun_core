@@ -38,7 +38,7 @@ services:
       - kafka3
 
   riakdb:
-    image: dr2.rbkmoney.com/rbkmoney/riak-base:d9dec1c4a69482f5c013bb155f6ccd18cd9d4653
+    image: rbkmoney/riak-base:0cec12d417eef7c6f11491b6e38619ada4739193
     environment:
       - CLUSTER_NAME=riakkv
     labels:
