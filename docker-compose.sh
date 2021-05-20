@@ -32,36 +32,36 @@ services:
     working_dir: $PWD
     command: /sbin/init
     depends_on:
-      - riakdb
+      - riak1
+      - riak2
+      - riak3
       - kafka1
       - kafka2
       - kafka3
 
-  riakdb:
-    image: dr2.rbkmoney.com/rbkmoney/riak-base:d9dec1c4a69482f5c013bb155f6ccd18cd9d4653
+  riak1:
+    &member-node
+    image: rbkmoney/riak-base:0cec12d417eef7c6f11491b6e38619ada4739193
     environment:
-      - CLUSTER_NAME=riakkv
-    labels:
-      - "com.basho.riak.cluster.name=riakkv"
+      - NODENAME=riak1.
+      - COORDINATOR_NODE=riak1
+    networks:
+      default:
+        aliases:
+          - riakdb
     volumes:
       - ./test_resources/riak_user.conf:/etc/riak/user.conf:ro
       - schemas:/etc/riak/schemas
-  member1:
-    &member-node
-    image: basho/riak-kv:ubuntu-2.2.3
-    labels:
-      - "com.basho.riak.cluster.name=riakkv"
-    links:
-      - riakdb
-    depends_on:
-      - riakdb
-    environment:
-      - CLUSTER_NAME=riakkv
-      - COORDINATOR_NODE=riakdb
-    volumes:
-      - ./test_resources/riak_user.conf:/etc/riak/user.conf:ro
-  member2:
+  riak2:
     <<: *member-node
+    environment:
+      - NODENAME=riak2.
+      - COORDINATOR_NODE=riak1.
+  riak3:
+    <<: *member-node
+    environment:
+      - NODENAME=riak3.
+      - COORDINATOR_NODE=riak1.
 
   zookeeper:
     image: confluentinc/cp-zookeeper:${CONFLUENT_PLATFORM_VERSION}
