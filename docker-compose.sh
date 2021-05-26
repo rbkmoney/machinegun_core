@@ -44,7 +44,7 @@ services:
     image: rbkmoney/riak-base:0cec12d417eef7c6f11491b6e38619ada4739193
     environment:
       - NODENAME=riak1.
-      - COORDINATOR_NODE=riak1
+      - COORDINATOR_NODE=riak1.
     networks:
       default:
         aliases:
