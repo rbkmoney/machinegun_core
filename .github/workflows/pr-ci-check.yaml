@@ -16,11 +16,11 @@ jobs:
       with:
         path: "~/.cache/rebar3"
         key: rebar-global-cache-${{ hashFiles('Makefile') }}
-    - name: Cache deps
+    - name: Cache _build
       uses: actions/cache@v2
       with:
-        path: "_build/default/lib"
-        key: deps-${{ hashFiles('Makefile', 'rebar.config', 'rebar.lock') }}
+        path: "_build"
+        key: build-${{ hashFiles('Makefile', 'rebar.config', 'rebar.lock') }}
     - name: Cache dialyzer cache
       uses: actions/cache@v2
       with:
