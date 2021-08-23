@@ -20,6 +20,7 @@ SUBTARGETS = $(patsubst %,%/.git,$(SUBMODULES))
 UTILS_PATH := build_utils
 TEMPLATES_PATH := .
 
+REGISTRY ?= ghcr.io
 # Name of the service
 SERVICE_NAME := machinegun
 # Service image default tag
@@ -27,13 +28,9 @@ SERVICE_IMAGE_TAG ?= $(shell git rev-parse HEAD)
 # The tag for service image to be pushed with
 SERVICE_IMAGE_PUSH_TAG ?= $(SERVICE_IMAGE_TAG)
 
-# Base image for the service
-BASE_IMAGE_NAME := service-erlang
-BASE_IMAGE_TAG := da0ab769f01b650b389d18fc85e7418e727cbe96
-
 # Build image tag to be used
 BUILD_IMAGE_NAME := build-erlang
-BUILD_IMAGE_TAG := 61a001bbb48128895735a3ac35b0858484fdb2eb
+BUILD_IMAGE_TAG := cc2d319150ec0b9cd23ad9347692a8066616b0f4
 
 CALL_ANYWHERE := \
 	all \
