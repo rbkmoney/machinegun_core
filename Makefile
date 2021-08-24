@@ -29,11 +29,11 @@ SERVICE_IMAGE_PUSH_TAG ?= $(SERVICE_IMAGE_TAG)
 
 # Base image for the service
 BASE_IMAGE_NAME := service-erlang
-BASE_IMAGE_TAG := da0ab769f01b650b389d18fc85e7418e727cbe96
+BASE_IMAGE_TAG := ef20e2ec1cb1528e9214bdeb862b15478950d5cd
 
 # Build image tag to be used
 BUILD_IMAGE_NAME := build-erlang
-BUILD_IMAGE_TAG := 61a001bbb48128895735a3ac35b0858484fdb2eb
+BUILD_IMAGE_TAG := 52042cbce455154e1128f6ce2e7af0aa58a854d7
 
 CALL_ANYWHERE := \
 	all \
@@ -87,7 +87,6 @@ clean:
 	$(REBAR) clean
 
 distclean:
-	$(REBAR) clean -a
 	rm -rfv _build _builds _cache _steps _temp
 
 # CALL_W_CONTAINER
