@@ -263,7 +263,7 @@ decode_aux_state({#{}, <<>>}) ->
 decode_history(Events) ->
     [
         {ID, Metadata, decode(EncodedEvent)}
-        || #{id := ID, body := {Metadata, EncodedEvent}} <- Events
+     || #{id := ID, body := {Metadata, EncodedEvent}} <- Events
     ].
 
 -spec decode_signal(signal()) -> signal().

@@ -138,7 +138,7 @@ is_alive(Options, NS, ID) ->
 list(Procreg, NS) ->
     [
         {NS, ID, Pid}
-        || {?WRAP_ID(_, ID), Pid} <- mg_core_procreg:select(Procreg, ?WRAP_ID(NS, '$1'))
+     || {?WRAP_ID(_, ID), Pid} <- mg_core_procreg:select(Procreg, ?WRAP_ID(NS, '$1'))
     ].
 
 %%

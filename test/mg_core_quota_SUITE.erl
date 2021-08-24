@@ -322,7 +322,7 @@ create_clients(Number, Shares) ->
                 share => S
             }
         }
-        || {N, S} <- lists:zip(lists:seq(1, Number), Shares)
+     || {N, S} <- lists:zip(lists:seq(1, Number), Shares)
     ].
 
 -spec reserve([client()], quota()) -> {[client()], quota()}.
@@ -364,7 +364,7 @@ set_expectation(Clients, Expecations) ->
 set_share(Clients, Shares) ->
     [
         C#client{options = O#{share => S}}
-        || {#client{options = O} = C, S} <- lists:zip(Clients, Shares)
+     || {#client{options = O} = C, S} <- lists:zip(Clients, Shares)
     ].
 
 -spec validate_quota_contract([client()], Limit :: mg_core_quota:resource()) -> ok.

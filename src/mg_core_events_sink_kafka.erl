@@ -79,7 +79,7 @@ encode(Encoder, NS, MachineID, Events) ->
             key => event_key(NS, MachineID),
             value => Encoder(NS, MachineID, Event)
         }
-        || Event <- Events
+     || Event <- Events
     ].
 
 -spec produce(brod:client(), brod:topic(), brod:key(), brod:batch_input()) ->

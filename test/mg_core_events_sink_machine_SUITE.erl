@@ -100,7 +100,7 @@ not_idempotent_add_get_events_test(C) ->
     ?assertEqual(ok, add_events(C)),
     ConfigEvents = [
         #{event => Event, source_ns => ?SOURCE_NS, source_id => ?SOURCE_ID}
-        || Event <- ?config(events, C)
+     || Event <- ?config(events, C)
     ],
     ExpectedEvents = lists:zip(
         lists:seq(1, erlang:length(?config(events, C)) * 2),

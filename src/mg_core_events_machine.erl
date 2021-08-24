@@ -662,12 +662,12 @@ machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
     } = State,
     Sources = [
         RS
-        || RS = {Range, _Getter} <- [
-               {compute_events_range(Events), event_list_getter(Events)},
-               {compute_events_range(ExtraEvents), event_list_getter(ExtraEvents)},
-               {EventsRange, storage_event_getter(Options, ID)}
-           ],
-           Range /= undefined
+     || RS = {Range, _Getter} <- [
+            {compute_events_range(Events), event_list_getter(Events)},
+            {compute_events_range(ExtraEvents), event_list_getter(ExtraEvents)},
+            {EventsRange, storage_event_getter(Options, ID)}
+        ],
+        Range /= undefined
     ],
     #{
         ns => Namespace,
