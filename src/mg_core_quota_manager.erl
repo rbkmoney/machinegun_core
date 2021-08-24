@@ -47,6 +47,6 @@ start_link(Options) ->
         #{strategy => one_for_one},
         [
             mg_core_quota_worker:child_spec(QuotaOptions, Name)
-            || #{name := Name} = QuotaOptions <- maps:values(Options)
+         || #{name := Name} = QuotaOptions <- maps:values(Options)
         ]
     ).

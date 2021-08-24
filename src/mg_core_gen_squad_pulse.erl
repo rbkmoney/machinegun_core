@@ -21,21 +21,29 @@
 %% TODO remove weak circular deps
 -type beat() ::
     {rank, {changed, mg_core_gen_squad:rank()}}
-    | {{member, pid()},
+    | {
+        {member, pid()},
         added
         | {refreshed, mg_core_gen_squad:member()}
-        | {removed, mg_core_gen_squad:member(), _Reason :: lost | {down, _}}}
-    | {{broadcast, mg_core_gen_squad_heart:payload()},
+        | {removed, mg_core_gen_squad:member(), _Reason :: lost | {down, _}}
+    }
+    | {
+        {broadcast, mg_core_gen_squad_heart:payload()},
         {sent, [pid()], _Ctx}
-        | received}
-    | {{timer, reference()},
+        | received
+    }
+    | {
+        {timer, reference()},
         {started, _Timeout :: non_neg_integer(), _Msg}
         | cancelled
-        | {fired, _Msg}}
-    | {{monitor, reference()},
+        | {fired, _Msg}
+    }
+    | {
+        {monitor, reference()},
         {started, pid()}
         | cancelled
-        | {fired, pid(), _Reason}}
+        | {fired, pid(), _Reason}
+    }
     | {unexpected, {{call, _From} | cast | info, _Payload}}.
 
 -type handler() :: mg_core_utils:mod_opts().

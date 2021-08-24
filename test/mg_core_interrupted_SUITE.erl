@@ -100,7 +100,7 @@ interrupted_machines_resumed(_C) ->
                 )
             )
         end
-        || ID <- IDs
+     || ID <- IDs
     ],
     ok = stop_automaton(Pid1),
 
@@ -111,7 +111,7 @@ interrupted_machines_resumed(_C) ->
             Answer,
             mg_core_machine:call(Options, ID, answer, ?REQ_CTX, mg_core_deadline:default())
         )
-        || ID <- IDs
+     || ID <- IDs
     ],
     ok = stop_automaton(Pid2),
 

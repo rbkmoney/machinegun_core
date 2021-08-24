@@ -78,7 +78,7 @@ init_per_suite(C) ->
     ],
     Apps = lists:flatten([
         genlib_app:start_application_with(App, AppConf)
-        || {App, AppConf} <- AppSpecs
+     || {App, AppConf} <- AppSpecs
     ]),
     {Events, _} = mg_core_events:generate_events_with_range(
         [{#{}, Body} || Body <- [1, 2, 3]],
@@ -134,7 +134,7 @@ do_read_all(Hosts, Topic, Partition, Offset, Result) ->
         {ok, {NewOffset, Records}} when NewOffset =/= Offset ->
             NewRecords = lists:reverse([
                 erlang:binary_to_term(Value)
-                || #kafka_message{value = Value} <- Records
+             || #kafka_message{value = Value} <- Records
             ]),
             do_read_all(Hosts, Topic, Partition, NewOffset, NewRecords ++ Result)
     end.

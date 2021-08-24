@@ -323,7 +323,7 @@ decode_aux_state({#{}, <<>>}) ->
 decode_events(Events) ->
     [
         decode(EncodedEvent)
-        || #{body := {#{}, EncodedEvent}} <- Events
+     || #{body := {#{}, EncodedEvent}} <- Events
     ].
 
 -spec decode_signal(signal()) -> signal().

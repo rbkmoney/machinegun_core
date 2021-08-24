@@ -281,7 +281,7 @@ do_fair_share_resources(TotalGuaranteedShares, Clients, Limit, FinalClients) ->
     NewClients = share_resource(fun get_share_target/2, ResourcePerShare, Limit, Clients),
     FreeResource = lists:sum([
         T - E
-        || #client_state{expectation = E, target = T} <- NewClients, E < T
+     || #client_state{expectation = E, target = T} <- NewClients, E < T
     ]),
     do_fair_share_resources(NewClients, FreeResource, FinalClients).
 

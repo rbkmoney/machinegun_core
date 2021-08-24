@@ -295,7 +295,7 @@ stress_test(C) ->
     ProcessCount = 20,
     Processes = [
         stress_test_start_process(ID, ProcessCount, Options)
-        || ID <- lists:seq(1, ProcessCount)
+     || ID <- lists:seq(1, ProcessCount)
     ],
 
     timer:sleep(5000),

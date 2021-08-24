@@ -357,7 +357,7 @@ run_load_test(
     _ = ct:pal("===> [~p] start workers done", [now_diff(Ts)]),
     RunnerPids = [
         stress_test_start_process(ManagerOptions, Job, N, St0)
-        || N <- lists:seq(1, RunnersCount)
+     || N <- lists:seq(1, RunnersCount)
     ],
     _ = ct:pal("===> [~p] start runners done", [now_diff(Ts)]),
     ok = timer:sleep(Duration),
