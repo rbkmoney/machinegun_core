@@ -528,7 +528,6 @@ new_processing_context(CallContext) ->
 -spec new_storage_machine() -> storage_machine().
 new_storage_machine() ->
     #{
-        status => sleeping,
         state => undefined
     }.
 
@@ -708,14 +707,14 @@ process_unsafe(
     NewState =
         case Action of
             {continue, _} ->
-                NewStorageMachine = NewStorageMachine0#{status := {processing, ReqCtx}},
+                NewStorageMachine = NewStorageMachine0#{status => {processing, ReqCtx}},
                 transit_state(ReqCtx, Deadline, NewStorageMachine, State);
             sleep ->
-                NewStorageMachine = NewStorageMachine0#{status := sleeping},
+                NewStorageMachine = NewStorageMachine0#{status => sleeping},
                 transit_state(ReqCtx, Deadline, NewStorageMachine, State);
             {wait, Timestamp, HdlReqCtx, HdlTo} ->
                 Status = {waiting, Timestamp, HdlReqCtx, HdlTo},
-                NewStorageMachine = NewStorageMachine0#{status := Status},
+                NewStorageMachine = NewStorageMachine0#{status => Status},
                 transit_state(ReqCtx, Deadline, NewStorageMachine, State);
             keep ->
                 State;
@@ -853,12 +852,12 @@ transit_state(ReqCtx, Deadline, StorageMachineNew = #{status := Status}, State) 
         namespace := NS,
         id := ID,
         options := Options,
-        storage_machine := StorageMachineWas = #{status := StatusWas},
+        storage_machine := StorageMachineWas,
         storage_context := StorageContext
     } = State,
     _ =
-        case Status of
-            StatusWas -> ok;
+        case StorageMachineWas of
+            #{status := Status} -> ok;
             _Different -> handle_status_transition(Status, State)
         end,
     F = fun() ->
