@@ -90,15 +90,8 @@ init_per_group(storage_memory, C) ->
         | C
     ];
 init_per_group(storage_cql, C) ->
-    Options = #{
-        node => {"scylla0", 9042},
-        keyspace => mg,
-        schema => mg_core_events_machine_cql_schema
-    },
-    MachineStorage = {mg_core_machine_storage_cql, Options},
-    EventsStorage = {mg_core_events_storage_cql, Options},
-    ok = mg_core_ct_helper:bootstrap_storage(MachineStorage, ?NS),
-    ok = mg_core_ct_helper:bootstrap_storage(EventsStorage, ?NS),
+    MachineStorage = mg_core_ct_helper:bootstrap_machine_storage(cql, ?NS, mg_core_events_machine),
+    EventsStorage = mg_core_ct_helper:bootstrap_events_storage(cql, ?NS),
     [
         {machine_storage, MachineStorage},
         {events_storage, EventsStorage}

@@ -34,6 +34,11 @@
 -behaviour(mg_core_machine).
 -export([pool_child_spec/2, process_machine/7]).
 
+%% mg_core_machine_storage_kvs
+-behaviour(mg_core_machine_storage_kvs).
+-export([state_to_opaque/1]).
+-export([opaque_to_state/1]).
+
 %% mg_core_machine_storage_cql
 -export([prepare_get_query/2]).
 -export([prepare_update_query/4]).
@@ -55,18 +60,25 @@
 -spec all() -> [test_name() | {group, group_name()}].
 all() ->
     [
-        {group, with_gproc}
-        % {group, with_consuela}
+        {group, matrix}
     ].
 
 -spec groups() -> [{group_name(), list(_), test_name()}].
 groups() ->
     [
+        {matrix, [], [
+            {with_memory, [], [
+                {group, with_gproc},
+                {group, with_consuela}
+            ]},
+            {with_cql, [], [
+                {group, with_gproc},
+                {group, with_consuela}
+            ]}
+        ]},
         {with_gproc, [], [{group, base}]},
         {with_consuela, [], [{group, base}]},
-        {base, [], [
-            simple_test
-        ]}
+        {base, [], [simple_test]}
     ].
 
 %%
@@ -77,7 +89,6 @@ init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_machine, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([consuela, machinegun_core]),
-    _ = (mg_core_machine_storage_cql:bootstrap(storage_options(), ?NAMESPACE)),
     [{apps, Apps} | C].
 
 -spec end_per_suite(config()) -> ok.
@@ -85,6 +96,14 @@ end_per_suite(C) ->
     mg_core_ct_helper:stop_applications(?config(apps, C)).
 
 -spec init_per_group(group_name(), config()) -> config().
+init_per_group(matrix, C) ->
+    C;
+init_per_group(with_memory, C) ->
+    Storage = mg_core_ct_helper:bootstrap_machine_storage(memory, ?NAMESPACE, ?MODULE),
+    [{storage, Storage} | C];
+init_per_group(with_cql, C) ->
+    Storage = mg_core_ct_helper:bootstrap_machine_storage(cql, ?NAMESPACE, ?MODULE),
+    [{storage, Storage} | C];
 init_per_group(with_gproc, C) ->
     [{registry, mg_core_procreg_gproc} | C];
 init_per_group(with_consuela, C) ->
@@ -179,7 +198,7 @@ simple_test(C) ->
 %% processor
 %%
 
--type machine_state() :: {mg_core_storage:opaque(), integer()}.
+-type machine_state() :: {binary(), integer()}.
 
 -spec pool_child_spec(_Options, atom()) -> supervisor:child_spec().
 pool_child_spec(_Options, Name) ->
@@ -216,28 +235,31 @@ process_machine(_, _, {repair, repair_arg}, _, ?REQ_CTX, _, {TestKey, TestValue}
     {{reply, repaired}, sleep, {TestKey, TestValue}}.
 
 %%
-%% storage
+%% mg_core_machine_storage_kvs
 %%
+-spec state_to_opaque(machine_state()) -> mg_core_storage:opaque().
+state_to_opaque({TestKey, TestValue}) ->
+    [TestKey, TestValue].
 
--define(COLUMNS, [
-    test_key,
-    test_counter
-]).
+-spec opaque_to_state(mg_core_storage:opaque()) -> machine_state().
+opaque_to_state([TestKey, TestValue]) ->
+    {TestKey, TestValue}.
 
 %%
-
+%% mg_core_machine_storage_cql
+%%
 -type query_get() :: mg_core_machine_storage_cql:query_get().
 -type query_update() :: mg_core_machine_storage_cql:query_update().
 
 -spec prepare_get_query(_, query_get()) -> query_get().
 prepare_get_query(_, Query) ->
-    ?COLUMNS ++ Query.
+    [test_key, test_counter] ++ Query.
 
 -spec prepare_update_query(_, machine_state(), machine_state() | undefined, query_update()) ->
     query_update().
 prepare_update_query(_, {TestKey, TestValue}, _Was, Query) ->
     Query#{
-        test_key => mg_core_machine_storage_cql:write_opaque(TestKey),
+        test_key => TestKey,
         test_counter => TestValue
     }.
 
@@ -252,7 +274,7 @@ bootstrap(_, NS, Client) ->
         mg_core_string_utils:join([
             "ALTER TABLE",
             mg_core_machine_storage_cql:mk_table_name(NS),
-            "ADD (test_key BLOB, test_counter INT)"
+            "ADD (test_key TEXT, test_counter INT)"
         ])
     ),
     ok.
@@ -279,8 +301,7 @@ automaton_options(C) ->
     #{
         namespace => ?NAMESPACE,
         processor => ?MODULE,
-        % storage => mg_core_storage_memory,
-        storage => {mg_core_machine_storage_cql, storage_options()},
+        storage => ?config(storage, C),
         worker => #{registry => ?config(registry, C)},
         pulse => ?MODULE,
         schedulers => #{
@@ -288,14 +309,6 @@ automaton_options(C) ->
             timers_retries => Scheduler,
             overseer => Scheduler
         }
-    }.
-
--spec storage_options() -> mg_core_machine_storage_cql:options().
-storage_options() ->
-    #{
-        node => {"scylla0", 9042},
-        keyspace => mg,
-        schema => ?MODULE
     }.
 
 -spec handle_beat(_, mg_core_pulse:beat()) -> ok.
