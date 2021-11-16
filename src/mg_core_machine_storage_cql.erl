@@ -491,12 +491,12 @@ bootstrap(Options, NS) ->
             "PRIMARY KEY (target, id)"
         ])
     ),
-    mg_core_utils:apply_mod_opts(get_schema(Options), bootstrap, [NS, Client]).
+    mg_core_utils:apply_mod_opts_if_defined(get_schema(Options), bootstrap, ok, [NS, Client]).
 
 -spec teardown(options(), ns()) -> ok.
 teardown(Options, NS) ->
     Client = mg_core_storage_cql:get_client(Options),
-    ok = mg_core_utils:apply_mod_opts(get_schema(Options), teardown, [NS, Client]),
+    ok = mg_core_utils:apply_mod_opts_if_defined(get_schema(Options), teardown, ok, [NS, Client]),
     ok = mg_core_storage_cql:execute_query(
         Client,
         mk_statement([
