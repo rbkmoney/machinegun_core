@@ -22,6 +22,8 @@
 -export([groups/0]).
 -export([init_per_suite/1]).
 -export([end_per_suite/1]).
+-export([init_per_group/2]).
+-export([end_per_group/2]).
 
 %% tests
 -export([tag/1]).
@@ -40,15 +42,18 @@
 -type test_name() :: atom().
 -type config() :: [{atom(), _}].
 
--spec all() -> [test_name()].
+-spec all() -> [{group, group_name()}].
 all() ->
     [
-        {group, main}
+        {group, storage_memory},
+        {group, storage_cql}
     ].
 
--spec groups() -> [{group_name(), list(_), test_name()}].
+-spec groups() -> [{group_name(), list(_), [test_name() | {group, group_name()}]}].
 groups() ->
     [
+        {storage_memory, [], [{group, main}]},
+        {storage_cql, [], [{group, main}]},
         {main, [sequence], [
             tag,
             idempotent_tag,
@@ -61,19 +66,38 @@ groups() ->
 %%
 %% starting/stopping
 %%
+-define(NS, <<"test_tags">>).
+
 -spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({mg_core_storage, '_', '_'}, x),
     Apps = mg_core_ct_helper:start_applications([machinegun_core]),
-    Pid = start_automaton(automaton_options()),
-    true = erlang:unlink(Pid),
-    [{apps, Apps}, {pid, Pid} | C].
+    [{apps, Apps} | C].
 
 -spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
-    ok = proc_lib:stop(?config(pid, C)),
     mg_core_ct_helper:stop_applications(?config(apps, C)).
+
+-spec init_per_group(group_name(), config()) -> config().
+init_per_group(storage_memory, C) ->
+    MachineStorage = mg_core_ct_helper:bootstrap_machine_storage(memory, ?NS, mg_core_machine_tags),
+    [{storage, MachineStorage} | C];
+init_per_group(storage_cql, C) ->
+    MachineStorage = mg_core_ct_helper:bootstrap_machine_storage(cql, ?NS, mg_core_machine_tags),
+    [{storage, MachineStorage} | C];
+init_per_group(main, C) ->
+    Options = automaton_options(?config(storage, C)),
+    Pid = start_automaton(Options),
+    true = erlang:unlink(Pid),
+    [{options, Options}, {automaton, Pid} | C].
+
+-spec end_per_group(group_name(), config()) -> _.
+end_per_group(main, C) ->
+    Pid = ?config(automaton, C),
+    ok = proc_lib:stop(Pid, shutdown, 5000);
+end_per_group(_Name, _C) ->
+    ok.
 
 %%
 %% tests
@@ -83,18 +107,18 @@ end_per_suite(C) ->
 -define(TAG, <<"tag">>).
 
 -spec tag(config()) -> _.
-tag(_C) ->
-    ok = mg_core_machine_tags:add(automaton_options(), ?TAG, ?ID, null, mg_core_deadline:default()).
+tag(C) ->
+    ok = mg_core_machine_tags:add(?config(options, C), ?TAG, ?ID, null, mg_core_deadline:default()).
 
 -spec idempotent_tag(config()) -> _.
 idempotent_tag(C) ->
     tag(C).
 
 -spec double_tag(config()) -> _.
-double_tag(_C) ->
+double_tag(C) ->
     {already_exists, ?ID} =
         mg_core_machine_tags:add(
-            automaton_options(),
+            ?config(options, C),
             ?TAG,
             ?OTHER_ID,
             null,
@@ -102,9 +126,9 @@ double_tag(_C) ->
         ).
 
 -spec replace(config()) -> _.
-replace(_C) ->
+replace(C) ->
     ok = mg_core_machine_tags:replace(
-        automaton_options(),
+        ?config(options, C),
         ?TAG,
         ?ID,
         null,
@@ -112,8 +136,8 @@ replace(_C) ->
     ).
 
 -spec resolve(config()) -> _.
-resolve(_C) ->
-    ?ID = mg_core_machine_tags:resolve(automaton_options(), ?TAG).
+resolve(C) ->
+    ?ID = mg_core_machine_tags:resolve(?config(options, C), ?TAG).
 
 %%
 %% utils
@@ -127,11 +151,11 @@ start_automaton(Options) ->
         )
     ).
 
--spec automaton_options() -> mg_core_machine_tags:options().
-automaton_options() ->
+-spec automaton_options(mg_core_machine_storage:options()) -> mg_core_machine_tags:options().
+automaton_options(Storage) ->
     #{
-        namespace => <<"test_tags">>,
-        storage => mg_core_storage_memory,
+        namespace => ?NS,
+        storage => Storage,
         worker => #{registry => mg_core_procreg_gproc},
         pulse => ?MODULE,
         retries => #{}

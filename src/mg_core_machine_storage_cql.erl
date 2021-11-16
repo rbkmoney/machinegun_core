@@ -260,7 +260,9 @@ accumulate_page(Result, Acc) ->
 get_schema(#{schema := Schema}) ->
     Schema;
 get_schema(#{processor := mg_core_events_machine}) ->
-    mg_core_events_machine_cql_schema.
+    mg_core_events_machine_cql_schema;
+get_schema(#{processor := mg_core_machine_tags}) ->
+    mg_core_machine_tags_cql_schema.
 
 %%
 

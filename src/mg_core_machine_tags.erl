@@ -19,6 +19,7 @@
 %% API
 -export_type([options/0]).
 -export_type([tag/0]).
+-export_type([state/0]).
 -export([child_spec/2]).
 -export([add/5]).
 -export([replace/5]).
@@ -78,7 +79,7 @@ replace(Options, Tag, ID, ReqCtx, Deadline) ->
 -spec resolve(options(), tag()) -> mg_core:id() | undefined | no_return().
 resolve(Options, Tag) ->
     try
-        opaque_to_state(mg_core_machine:get(machine_options(Options), Tag))
+        mg_core_machine:get(machine_options(Options), Tag)
     catch
         throw:{logic, machine_not_found} ->
             undefined
