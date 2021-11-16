@@ -30,7 +30,6 @@
 -type options() :: #{
     % Base
     name := mg_core_machine_storage:name(),
-    processor := module(),
     pulse := mg_core_pulse:handler(),
     % KV Storage
     kvs := mg_core_storage:options()

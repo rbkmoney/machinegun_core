@@ -13,7 +13,6 @@
 -type options() :: #{
     % Base
     name := mg_core_events_storage:name(),
-    processor := module(),
     pulse := mg_core_pulse:handler(),
     % Network
     node := {inet:ip_address() | string(), Port :: integer()},

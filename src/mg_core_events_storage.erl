@@ -28,7 +28,6 @@
 -type options() :: mg_core_utils:mod_opts(storage_options()).
 -type storage_options() :: #{
     name := name(),
-    processor := module(),
     pulse := mg_core_pulse:handler(),
     atom() => _
 }.

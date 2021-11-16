@@ -809,7 +809,7 @@ compute_events_range([#{id := ID} | _] = Events) ->
 -spec events_storage_options(options()) -> mg_core_storage:options().
 events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
     {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
-    {Mod, Options#{name => {NS, ?MODULE, events}, processor => ?MODULE, pulse => Handler}}.
+    {Mod, Options#{name => {NS, ?MODULE, events}, pulse => Handler}}.
 
 %%
 %% packer to opaque
