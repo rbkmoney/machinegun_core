@@ -96,7 +96,7 @@ end_per_suite(C) ->
 
 -spec get_events_test(config()) -> any().
 get_events_test(_C) ->
-    NS = <<"events">>,
+    NS = ?FUNCTION_NAME_STRING,
     ProcessorOpts = #{
         signal_handler => fun({init, <<>>}, AuxState, []) ->
             {AuxState, [], #{}}
@@ -207,7 +207,7 @@ t_direction() ->
 
 -spec continuation_repair_test(config()) -> any().
 continuation_repair_test(_C) ->
-    NS = <<"test">>,
+    NS = ?FUNCTION_NAME_STRING,
     MachineID = <<"machine">>,
     TestRunner = self(),
     ProcessorOptions = #{
@@ -233,7 +233,7 @@ continuation_repair_test(_C) ->
 
 -spec double_tag_repair_test(config()) -> any().
 double_tag_repair_test(_C) ->
-    NS = <<"test">>,
+    NS = ?FUNCTION_NAME_STRING,
     MachineID1 = <<"machine1">>,
     MachineID2 = <<"machine2">>,
     Tag = <<"haha got you">>,
@@ -254,7 +254,7 @@ double_tag_repair_test(_C) ->
 
 -spec get_corrupted_machine_fails(config()) -> any().
 get_corrupted_machine_fails(_C) ->
-    NS = <<"corruption">>,
+    NS = ?FUNCTION_NAME_STRING,
     MachineID = genlib:to_binary(?FUNCTION_NAME),
     LoseEvery = 4,
     ProcessorOpts = #{
@@ -418,7 +418,7 @@ events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
         processor => {?MODULE, ProcessorOptions},
         tagging => #{
             namespace => <<NS/binary, "_tags">>,
-            storage => Storage,
+            storage => machine_kv_storage(Storage),
             worker => #{
                 registry => mg_core_procreg_gproc
             },
@@ -427,7 +427,7 @@ events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
         },
         machines => #{
             namespace => NS,
-            storage => mg_core_ct_helper:build_storage(NS, Storage),
+            storage => machine_cql_storage(),
             worker => #{
                 registry => mg_core_procreg_gproc
             },
@@ -440,6 +440,16 @@ events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
         },
         events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_events">>, Storage)
     }.
+
+machine_kv_storage(KVStorage) ->
+    {mg_core_machine_storage_kvs, #{kvs => KVStorage}}.
+
+machine_cql_storage() ->
+    {mg_core_machine_storage_cql, #{
+        node => {"scylla0", 9042},
+        keyspace => mg,
+        schema => ?MODULE
+    }}.
 
 -spec start(mg_core_events_machine:options(), mg_core:id(), term()) -> ok.
 start(Options, MachineID, Args) ->

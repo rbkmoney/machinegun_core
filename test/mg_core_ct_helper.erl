@@ -28,6 +28,7 @@
 -export([assert_wait_expected/3]).
 
 -export([build_storage/2]).
+-export([bootstrap_storage/2]).
 
 -export([stop_wait_all/3]).
 
@@ -99,6 +100,19 @@ build_storage(NS, Module) when is_atom(Module) ->
     build_storage(NS, {Module, #{}});
 build_storage(NS, {Module, Options}) ->
     {Module, Options#{name => erlang:binary_to_atom(NS, utf8)}}.
+
+-spec bootstrap_storage(
+    mg_core_machine_storage:options() | mg_core_events_storage:options(),
+    mg_core:ns()
+) -> ok.
+bootstrap_storage({mg_core_machine_storage_cql, Options}, NS) ->
+    ok = mg_core_machine_storage_cql:teardown(Options, NS),
+    ok = mg_core_machine_storage_cql:bootstrap(Options, NS);
+bootstrap_storage({mg_core_events_storage_cql, Options}, NS) ->
+    ok = mg_core_events_storage_cql:teardown(Options, NS),
+    ok = mg_core_events_storage_cql:bootstrap(Options, NS);
+bootstrap_storage(_ModOpts, _NS) ->
+    ok.
 
 -spec stop_wait_all([pid()], _Reason, timeout()) -> ok.
 stop_wait_all(Pids, Reason, Timeout) ->

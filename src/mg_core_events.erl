@@ -23,6 +23,7 @@
 -export_type([id/0]).
 -export_type([body/0]).
 -export_type([content/0]).
+-export_type([metadata/0]).
 -export_type([event/0]).
 -export_type([event/1]).
 -export_type([history_range/0]).
@@ -74,8 +75,7 @@
 -type event() :: event(body()).
 -type event(T) :: #{
     id => id(),
-    % in nanosecond
-    created_at => integer(),
+    created_at => mg_core:unix_timestamp_ns(),
     body => T
 }.
 

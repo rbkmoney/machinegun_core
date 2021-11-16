@@ -53,4 +53,6 @@
     end)()
 ).
 
+-define(FUNCTION_NAME_STRING, (erlang:atom_to_binary(?FUNCTION_NAME))).
+
 -endif.

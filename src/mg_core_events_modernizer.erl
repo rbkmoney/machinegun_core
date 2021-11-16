@@ -95,8 +95,13 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
     end.
 
 -spec store_event(mg_core_events_machine:options(), mg_core:id(), mg_core_events:event()) -> ok.
-store_event(Options, ID, Event) ->
-    mg_core_events_storage:store_event(Options, ID, Event).
+store_event(Options = #{namespace := NS}, ID, Event) ->
+    mg_core_events_storage:store_event(
+        mg_core_events_machine:events_storage_options(Options),
+        NS,
+        ID,
+        Event
+    ).
 
 -spec filter_outdated_history(options(), [mg_core_events:event()]) -> [mg_core_events:event()].
 filter_outdated_history(Options, History) ->

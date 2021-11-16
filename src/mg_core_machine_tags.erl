@@ -28,6 +28,11 @@
 -behaviour(mg_core_machine).
 -export([process_machine/7]).
 
+%% mg_core_machine_storage_kvs
+-behaviour(mg_core_machine_storage_kvs).
+-export([state_to_opaque/1]).
+-export([opaque_to_state/1]).
+
 -type options() :: #{
     namespace => mg_core:ns(),
     worker => mg_core_workers_manager:options(),
@@ -94,20 +99,20 @@ resolve(Options, Tag) ->
     mg_core_machine:machine_state()
 ) -> mg_core_machine:processor_result().
 process_machine(_, _, {init, undefined}, _, _, _, _) ->
-    {{reply, ok}, sleep, state_to_opaque(undefined)};
+    {{reply, ok}, sleep, undefined};
 process_machine(_, _, {repair, undefined}, _, _, _, State) ->
     {{reply, ok}, sleep, State};
-process_machine(_, _, {call, {add, ID}}, _, _, _, PackedState) ->
-    case opaque_to_state(PackedState) of
+process_machine(_, _, {call, {add, ID}}, _, _, _, State) ->
+    case State of
         undefined ->
-            {{reply, ok}, sleep, state_to_opaque(ID)};
+            {{reply, ok}, sleep, ID};
         ID ->
-            {{reply, ok}, sleep, PackedState};
+            {{reply, ok}, sleep, State};
         OtherID ->
-            {{reply, {already_exists, OtherID}}, sleep, PackedState}
+            {{reply, {already_exists, OtherID}}, sleep, State}
     end;
 process_machine(_, _, {call, {replace, ID}}, _, _, _, _) ->
-    {{reply, ok}, sleep, state_to_opaque(ID)}.
+    {{reply, ok}, sleep, ID}.
 
 %%
 %% local
