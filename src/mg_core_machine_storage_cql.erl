@@ -12,9 +12,9 @@
 %%  * We need better client.
 %%    Currently employed `cqerl` lacks a way to start independent pools, one per
 %%    namespace. Also we can't control pool size through code, only through
-%%    envvar. FIXME: ~~Also we can't specify timeout per request~~. Also the way
-%%    it works with maps isn't great, looks like we condemn ourselves to a
-%%    performance penalty.
+%%    envvar. Also we can't specify timeout per request. Also the way it works
+%%    with maps isn't great, looks like we condemn ourselves to a performance
+%%    penalty.
 %%
 %%  * Schema migrations. 😓
 %%    Also note that records are not versioned (yet). Which means that each
@@ -113,13 +113,6 @@
     original_status,
     original_target
 ]).
-
-% NOTE
-% This should ensure that reads either see recent writes or fail.
-% This way we prevent lost writes when, say, some machines fail over quickly to
-% another node and resume processing.
--define(DEFAULT_READ_CONSISTENCY, quorum).
--define(DEFAULT_WRITE_CONSISTENCY, quorum).
 
 -define(STATUS_SLEEPING, 1).
 -define(STATUS_WAITING, 2).
