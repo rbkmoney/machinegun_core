@@ -634,7 +634,7 @@ handle_state_change(
     DelayedActions = #{
         % NOTE
         % This is a range of events which are not yet pushed to event sinks
-        new_events_range => mg_core_events:diff_ranges(EventsRange, EventsRangeWas)
+        new_events_range => diff_event_ranges(EventsRange, EventsRangeWas)
     },
     State = add_delayed_actions(
         DelayedActions,
@@ -644,6 +644,13 @@ handle_state_change(
         }
     ),
     split_events(Options, State, Events).
+
+-spec diff_event_ranges(events_range(), events_range()) -> events_range().
+diff_event_ranges(LHS, undefined) ->
+    LHS;
+diff_event_ranges(LHS, RHS) ->
+    {_, Diff} = mg_core_dirange:dissect(LHS, mg_core_dirange:to(RHS)),
+    Diff.
 
 -spec handle_complex_action(complex_action(), request_context(), state()) ->
     state().

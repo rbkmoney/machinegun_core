@@ -32,7 +32,6 @@
 
 %% events ranges intersection
 -export([intersect_range/2]).
--export([diff_ranges/2]).
 -export([slice_events/2]).
 
 %% events generation
@@ -127,13 +126,6 @@ limit_range(R, undefined) ->
     R;
 limit_range(R, N) ->
     mg_core_dirange:limit(R, N).
-
--spec diff_ranges(events_range(), events_range()) -> events_range().
-diff_ranges(LHS, undefined) ->
-    LHS;
-diff_ranges(LHS, RHS) ->
-    {_, Diff} = mg_core_dirange:dissect(LHS, mg_core_dirange:to(RHS)),
-    Diff.
 
 -spec slice_events([event()], events_range()) -> [event()].
 slice_events(Events = [#{id := First} | _], Range) ->

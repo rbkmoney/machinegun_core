@@ -29,8 +29,8 @@
 -export([continuation_repair_test/1]).
 -export([double_tag_repair_test/1]).
 -export([get_corrupted_machine_fails/1]).
--export([ed_209_migration_simple_succeeds/1]).
--export([ed_209_migration_repair_succeeds/1]).
+-export([ed209_migration_simple_succeeds/1]).
+-export([ed209_migration_repair_succeeds/1]).
 
 %% mg_core_events_machine handler
 -behaviour(mg_core_events_machine).
@@ -83,8 +83,8 @@ all() ->
         continuation_repair_test,
         double_tag_repair_test,
         get_corrupted_machine_fails,
-        ed_209_migration_simple_succeeds,
-        ed_209_migration_repair_succeeds
+        ed209_migration_simple_succeeds,
+        ed209_migration_repair_succeeds
     ].
 
 -spec init_per_suite(config()) -> config().
@@ -292,20 +292,20 @@ get_corrupted_machine_fails(_C) ->
     _ = ?assertError(_, get_history(Options, MachineID)),
     ok = stop_automaton(Pid).
 
--spec ed_209_migration_simple_succeeds(config()) -> any().
-ed_209_migration_simple_succeeds(C) ->
-    ed_209_migration_scenario_succeeds(simple, C).
+-spec ed209_migration_simple_succeeds(config()) -> any().
+ed209_migration_simple_succeeds(C) ->
+    ed209_migration_scenario_succeeds(simple, C).
 
--spec ed_209_migration_repair_succeeds(config()) -> any().
-ed_209_migration_repair_succeeds(C) ->
-    ed_209_migration_scenario_succeeds(repair, C).
+-spec ed209_migration_repair_succeeds(config()) -> any().
+ed209_migration_repair_succeeds(C) ->
+    ed209_migration_scenario_succeeds(repair, C).
 
 -define(ED_209_STASH_SIZE, 5).
 -define(ED_209_INITIAL_EVENTS, 8).
 -define(ED_209_EMITTED_EVENTS, 4).
 
--spec ed_209_migration_scenario_succeeds(simple | repair, config()) -> any().
-ed_209_migration_scenario_succeeds(Scenario, C) ->
+-spec ed209_migration_scenario_succeeds(simple | repair, config()) -> any().
+ed209_migration_scenario_succeeds(Scenario, C) ->
     NS = <<"ED-209">>,
     {ok, StoragePid} = mg_core_storage_memory:start_link(#{name => ?MODULE}),
     StorageOpts = #{existing_storage_name => ?MODULE},
@@ -356,14 +356,14 @@ ed_209_migration_scenario_succeeds(Scenario, C) ->
     % Fire up current automaton, with existing machine state in storage
     {ok, Pid2} = mg_core_events_machine:start_link(Options),
     % Verify migration scenario
-    _ = ed_209_migration_scenario_succeeds(Options, MachineID, Scenario, C),
+    _ = ed209_migration_scenario_succeeds(Options, MachineID, Scenario, C),
     ok = stop_automaton(Pid2),
 
     ok = proc_lib:stop(StoragePid, normal, 5000).
 
--spec ed_209_migration_scenario_succeeds(options(), mg_core:id(), simple | repair, config()) ->
+-spec ed209_migration_scenario_succeeds(options(), mg_core:id(), simple | repair, config()) ->
     any().
-ed_209_migration_scenario_succeeds(Options, MachineID, simple, _C) ->
+ed209_migration_scenario_succeeds(Options, MachineID, simple, _C) ->
     NumEvents1 = ?ED_209_INITIAL_EVENTS + ?ED_209_EMITTED_EVENTS,
     ?assertEqual({_AuxState1 = 1, mk_seq_history(NumEvents1)}, get_machine(Options, MachineID)),
     ?assertEqual(ok, simple_repair(Options, MachineID)),
@@ -373,7 +373,7 @@ ed_209_migration_scenario_succeeds(Options, MachineID, simple, _C) ->
     ?assertEqual(ok, call(Options, MachineID, {emit, NumFreshEvents})),
     ?assertEqual({_AuxState3 = 2, mk_seq_history(NumEvents2)}, get_machine(Options, MachineID)),
     ?assertEqual(lists:seq(1, NumEvents2), _SinkEvents = ?flushMailbox());
-ed_209_migration_scenario_succeeds(Options, MachineID, repair, _C) ->
+ed209_migration_scenario_succeeds(Options, MachineID, repair, _C) ->
     NumEvents1 = ?ED_209_INITIAL_EVENTS + ?ED_209_EMITTED_EVENTS,
     ?assertEqual({_AuxState1 = 1, mk_seq_history(NumEvents1)}, get_machine(Options, MachineID)),
     NumRepairEvents = 1,
