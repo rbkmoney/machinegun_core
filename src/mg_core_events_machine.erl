@@ -66,6 +66,11 @@
     repair_result() | no_return().
 -optional_callbacks([processor_child_spec/1]).
 
+-type id() :: mg_core:id().
+-type tag() :: mg_core_machine_tags:tag().
+-type event() :: mg_core_events:event().
+-type events_range() :: mg_core_events:events_range().
+
 %% calls, signals, get_gistory
 -type signal_args() :: {signal(), machine()}.
 -type call_args() :: {term(), machine()}.
@@ -80,6 +85,9 @@
 -type signal() :: {init, term()} | timeout | {repair, term()}.
 -type aux_state() :: mg_core_events:content().
 -type request_context() :: mg_core:request_context().
+-type reply_action() :: mg_core_machine:processor_reply_action().
+-type flow_action() :: mg_core_machine:processor_flow_action().
+-type process_result() :: {reply_action(), flow_action(), state()}.
 
 -type machine() :: #{
     ns => mg_core:ns(),
@@ -100,7 +108,7 @@
     tag => tag_action() | undefined,
     remove => remove | undefined
 }.
--type tag_action() :: mg_core_machine_tags:tag().
+-type tag_action() :: tag().
 -type timer_action() ::
     {set_timer, timer(), mg_core_events:history_range() | undefined,
         Timeout :: pos_integer() | undefined}
@@ -109,7 +117,7 @@
 -type timeout_() :: non_neg_integer().
 -type deadline() :: mg_core_deadline:deadline().
 
--type ref() :: {id, mg_core:id()} | {tag, mg_core_machine_tags:tag()}.
+-type ref() :: {id, id()} | {tag, tag()}.
 -type options() :: #{
     namespace => mg_core:ns(),
     events_storage => storage_options(),
@@ -144,7 +152,7 @@ start_link(Options) ->
         ])
     ).
 
--spec start(options(), mg_core:id(), term(), request_context(), deadline()) -> ok.
+-spec start(options(), id(), term(), request_context(), deadline()) -> ok.
 start(Options, ID, Args, ReqCtx, Deadline) ->
     HRange = {undefined, undefined, forward},
     ok = mg_core_machine:start(
@@ -203,19 +211,17 @@ get_machine(Options, Ref, HRange) ->
     % нужно понимать, что эти операции разнесены по времени, и тут могут быть рэйсы
     ID = ref2id(Options, Ref),
     InitialState = opaque_to_state(mg_core_machine:get(machine_options(Options), ID)),
-    {EffectiveState, ExtraEvents} = mg_core_utils:throw_if_undefined(
-        try_apply_delayed_actions(InitialState),
-        {logic, machine_not_found}
-    ),
-    machine(Options, ID, EffectiveState, ExtraEvents, HRange).
+    EffectiveState = try_apply_delayed_actions(InitialState),
+    _ = mg_core_utils:throw_if_undefined(EffectiveState, {logic, machine_not_found}),
+    machine(Options, ID, EffectiveState, HRange).
 
--spec remove(options(), mg_core:id(), request_context(), deadline()) -> ok.
+-spec remove(options(), id(), request_context(), deadline()) -> ok.
 remove(Options, ID, ReqCtx, Deadline) ->
     mg_core_machine:call(machine_options(Options), ID, remove, ReqCtx, Deadline).
 
 %%
 
--spec ref2id(options(), ref()) -> mg_core:id() | no_return().
+-spec ref2id(options(), ref()) -> id() | no_return().
 ref2id(_, {id, ID}) ->
     ID;
 ref2id(Options, {tag, Tag}) ->
@@ -229,7 +235,7 @@ ref2id(Options, {tag, Tag}) ->
 %%
 -type state() :: #{
     events => [mg_core_events:event()],
-    events_range => mg_core_events:events_range(),
+    events_range => events_range(),
     aux_state => aux_state(),
     delayed_actions => delayed_actions(),
     timer => int_timer() | undefined
@@ -237,11 +243,13 @@ ref2id(Options, {tag, Tag}) ->
 -type delayed_actions() ::
     #{
         add_tag => mg_core_machine_tags:tag() | undefined,
-        new_timer => int_timer() | undefined | unchanged,
         remove => remove | undefined,
+        new_events_range => events_range(),
+        % ED-290
+        % Deprecated, should be removed after initial rollout.
+        new_timer => int_timer() | undefined | unchanged,
         add_events => [mg_core_events:event()],
-        new_aux_state => aux_state(),
-        new_events_range => mg_core_events:events_range()
+        new_aux_state => aux_state()
     }
     | undefined.
 
@@ -257,7 +265,7 @@ processor_child_spec(Options) ->
 
 -spec process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) -> Result when
     Options :: options(),
-    ID :: mg_core:id(),
+    ID :: id(),
     Impact :: mg_core_machine:processor_impact(),
     PCtx :: mg_core_machine:processing_context(),
     ReqCtx :: request_context(),
@@ -288,15 +296,13 @@ process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) ->
 
 -spec process_machine_(Options, ID, Impact, PCtx, ReqCtx, Deadline, State) -> Result when
     Options :: options(),
-    ID :: mg_core:id(),
+    ID :: id(),
     Impact :: mg_core_machine:processor_impact() | {'timeout', _},
     PCtx :: mg_core_machine:processing_context(),
     ReqCtx :: request_context(),
     Deadline :: deadline(),
     State :: state(),
-    Result ::
-        {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()}
-        | no_return().
+    Result :: process_result() | no_return().
 process_machine_(
     Options,
     ID,
@@ -313,10 +319,15 @@ process_machine_(_, _, {call, remove}, _, _, _, State) ->
     {{reply, ok}, remove, State};
 process_machine_(Options, ID, {Subj, {Args, HRange}}, _, ReqCtx, Deadline, State) ->
     % обработка стандартных запросов
-    {EffectiveState, ExtraEvents} = try_apply_delayed_actions(State),
-    #{events_range := EventsRange} = EffectiveState,
-    Machine = machine(Options, ID, EffectiveState, ExtraEvents, HRange),
-    process_machine_std(Options, ReqCtx, Deadline, Subj, Args, Machine, EventsRange, State);
+    % NOTE
+    % We won't handle `undefined` here though it's possible, yet extremely unlikely.
+    % Imagine a machine ordered to be removed failed during continuation, and then someone tries
+    % to repair it.
+    EffectiveState = try_apply_delayed_actions(State),
+    Machine = machine(Options, ID, EffectiveState, HRange),
+    % TODO ED-290
+    % Keeping original state intact shouldn't be needed after initial rollout?
+    process_machine_std(Options, ReqCtx, Deadline, Subj, Args, Machine, EffectiveState);
 process_machine_(
     Options,
     ID,
@@ -331,18 +342,30 @@ process_machine_(
     % надо понимать, что:
     %  - эвенты добавляются в event sink
     %  - создатся тэг
-    %  - эвенты сохраняются в сторадж
-    %  - обновится event_range
     %  - отсылается ответ
     %  - если есть удаление, то удаляется
     % надо быть аккуратнее, мест чтобы накосячить тут вагон и маленькая тележка  :-\
     %
     % действия должны обязательно произойти в конце концов (таймаута нет), либо машина должна упасть
-    #{add_tag := Tag, add_events := Events} = DelayedActions,
-    {State, ExternalEvents} = split_events(Options, State0, Events),
-    ok = push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events),
-    ok = add_tag(Options, ID, ReqCtx, Deadline, Tag),
-    ok = store_events(Options, ID, ReqCtx, ExternalEvents),
+
+    ok = update_event_sinks(Options, ID, ReqCtx, Deadline, State0),
+    ok = add_tag(Options, ID, ReqCtx, Deadline, maps:get(add_tag, DelayedActions)),
+
+    % TODO ED-290
+    % Should be safe to drop after initial rollout, given there are no machines in production which
+    % became failed during continuation processing.
+    State1 =
+        case DelayedActions of
+            #{add_events := Events} ->
+                {State, ExternalEvents} = split_events(Options, State0, Events),
+                ok = store_events(Options, ID, ReqCtx, ExternalEvents),
+                % NOTE
+                % Doing this so these `Events` won't duplicate in state later on, in
+                % `try_apply_delayed_actions/1`, since it hijacks event stash.
+                State#{delayed_actions := DelayedActions#{add_events := []}};
+            #{} ->
+                State0
+        end,
 
     ReplyAction =
         case PCtx of
@@ -351,55 +374,42 @@ process_machine_(
             undefined ->
                 noreply
         end,
-    {FlowAction, NewState} =
-        case apply_delayed_actions_to_state(DelayedActions, State) of
+    {FlowAction, State2} =
+        case try_apply_delayed_actions(State1) of
             remove ->
-                {remove, State};
-            State1 ->
-                {state_to_flow_action(State1), State1}
+                {remove, State1};
+            StateNext ->
+                {state_to_flow_action(StateNext), StateNext}
         end,
-    ok = emit_action_beats(Options, ID, ReqCtx, DelayedActions),
-    {ReplyAction, FlowAction, NewState}.
+    {ReplyAction, FlowAction, reset_delayed_actions(State2)}.
 
--spec process_machine_std(Options, ReqCtx, Deadline, Subj, Args, Machine, EventsRange, State) ->
-    Result
+-spec process_machine_std(Options, ReqCtx, Deadline, Subject, Args, Machine, State) ->
+    process_result() | no_return()
 when
     Options :: options(),
     ReqCtx :: request_context(),
     Deadline :: deadline(),
-    Subj :: init | repair | call | timeout,
+    Subject :: init | repair | call | timeout,
     Args :: term(),
     Machine :: machine(),
-    EventsRange :: mg_core_events:events_range(),
-    State :: state(),
-    Result ::
-        {mg_core_machine:processor_reply_action(), mg_core_machine:processor_flow_action(), state()}
-        | no_return().
-process_machine_std(Options, ReqCtx, Deadline, repair, Args, Machine, EventsRange, State) ->
-    case process_repair(Options, ReqCtx, Deadline, Args, Machine, EventsRange) of
-        {ok, {Reply, DelayedActions}} ->
-            NewState = add_delayed_actions(DelayedActions, State),
+    State :: state().
+process_machine_std(Options, ReqCtx, Deadline, repair, Args, Machine, State) ->
+    case process_repair(Options, ReqCtx, Deadline, Args, Machine, State) of
+        {ok, {Reply, NewState}} ->
             {noreply, {continue, {ok, Reply}}, NewState};
         {error, _} = Error ->
             {{reply, Error}, keep, State}
     end;
-process_machine_std(Options, ReqCtx, Deadline, Subj, Args, Machine, EventsRange, State) ->
-    {Reply, DelayedActions} =
-        case Subj of
-            init -> process_signal(Options, ReqCtx, Deadline, {init, Args}, Machine, EventsRange);
-            timeout -> process_signal(Options, ReqCtx, Deadline, timeout, Machine, EventsRange);
-            call -> process_call(Options, ReqCtx, Deadline, Args, Machine, EventsRange)
+process_machine_std(Options, ReqCtx, Deadline, Subject, Args, Machine, State) ->
+    {Reply, NewState} =
+        case Subject of
+            init -> process_signal(Options, ReqCtx, Deadline, {init, Args}, Machine, State);
+            timeout -> process_signal(Options, ReqCtx, Deadline, timeout, Machine, State);
+            call -> process_call(Options, ReqCtx, Deadline, Args, Machine, State)
         end,
-    NewState = add_delayed_actions(DelayedActions, State),
     {noreply, {continue, Reply}, NewState}.
 
--spec add_tag(
-    options(),
-    mg_core:id(),
-    request_context(),
-    deadline(),
-    undefined | mg_core_machine_tags:tag()
-) -> ok.
+-spec add_tag(options(), id(), request_context(), deadline(), undefined | tag()) -> ok.
 add_tag(_, _, _, _, undefined) ->
     ok;
 add_tag(Options, ID, ReqCtx, Deadline, Tag) ->
@@ -423,26 +433,46 @@ add_tag(Options, ID, ReqCtx, Deadline, Tag) ->
             end
     end.
 
--spec split_events(options(), state(), [mg_core_events:event()]) ->
+-spec split_events(options(), state(), [event()]) ->
     {state(), [mg_core_events:event()]}.
 split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEvents) ->
     Events = EventStash ++ NewEvents,
-    Len = erlang:length(Events),
-    case Len > Max of
+    NumEvents = erlang:length(Events),
+    case NumEvents > Max of
         true ->
-            {External, Internal} = lists:split(Len - Max, Events),
+            {External, Internal} = lists:split(NumEvents - Max, Events),
             {State#{events => Internal}, External};
         false ->
             {State#{events => Events}, []}
     end.
 
--spec store_events(options(), mg_core:id(), request_context(), [mg_core_events:event()]) -> ok.
+-spec store_events(options(), id(), request_context(), [event()]) -> ok.
 store_events(Options, ID, _RequestContext, Events) ->
     mg_core_events_storage:store_events(Options, ID, Events).
 
--spec push_events_to_event_sinks(options(), mg_core:id(), request_context(), deadline(), [
-    mg_core_events:event()
-]) -> ok.
+-spec update_event_sinks(options(), id(), request_context(), deadline(), state()) -> ok.
+%% TODO ED-290
+%% Should be safe to drop this clause after initial rollout, given there are no machines in
+%% production which became failed during continuation processing.
+update_event_sinks(
+    Options,
+    ID,
+    ReqCtx,
+    Deadline,
+    #{delayed_actions := #{add_events := Events}}
+) ->
+    push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events);
+update_event_sinks(
+    Options,
+    ID,
+    ReqCtx,
+    Deadline,
+    State = #{delayed_actions := #{new_events_range := NewEventsRange}}
+) ->
+    Events = get_events(Options, ID, State, NewEventsRange),
+    push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events).
+
+-spec push_events_to_event_sinks(options(), id(), request_context(), deadline(), [event()]) -> ok.
 push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events) ->
     Namespace = get_option(namespace, Options),
     EventSinks = maps:get(event_sinks, Options, []),
@@ -469,160 +499,183 @@ state_to_flow_action(#{timer := {Timestamp, ReqCtx, HandlingTimeout, _}}) ->
 -spec apply_delayed_actions_to_state(delayed_actions(), state()) -> state() | remove.
 apply_delayed_actions_to_state(#{remove := remove}, _) ->
     remove;
+% TODO ED-290
+% Should be safe to drop this clause after initial rollout, given there are no machines
+% in production which became failed during continuation processing.
 apply_delayed_actions_to_state(
-    DA = #{new_aux_state := NewAuxState, new_events_range := NewEventsRange},
-    State
+    DA = #{
+        add_events := NewEvents,
+        new_aux_state := NewAuxState,
+        new_events_range := NewEventsRange
+    },
+    State = #{events := Events}
 ) ->
     apply_delayed_timer_actions_to_state(
         DA,
         State#{
+            % NOTE
+            % Hijacking event stash stuff here, in the name of code simplicity.
+            events := Events ++ NewEvents,
             events_range := NewEventsRange,
-            aux_state := NewAuxState,
-            delayed_actions := undefined
+            aux_state := NewAuxState
         }
-    ).
+    );
+apply_delayed_actions_to_state(DA, State) ->
+    apply_delayed_timer_actions_to_state(DA, State).
 
 -spec apply_delayed_timer_actions_to_state(delayed_actions(), state()) -> state().
 apply_delayed_timer_actions_to_state(#{new_timer := unchanged}, State) ->
     State;
 apply_delayed_timer_actions_to_state(#{new_timer := Timer}, State) ->
-    State#{timer := Timer}.
+    State#{timer := Timer};
+apply_delayed_timer_actions_to_state(#{}, State) ->
+    State.
 
--spec emit_action_beats(options(), mg_core:id(), request_context(), delayed_actions()) -> ok.
-emit_action_beats(Options, ID, ReqCtx, DelayedActions) ->
-    ok = emit_timer_action_beats(Options, ID, ReqCtx, DelayedActions),
+-spec emit_action_beats(options(), mg_core:id(), request_context(), complex_action()) -> ok.
+emit_action_beats(Options, ID, ReqCtx, ComplexAction) ->
+    ok = emit_timer_action_beats(Options, ID, ReqCtx, ComplexAction),
     ok.
 
--spec emit_timer_action_beats(options(), mg_core:id(), request_context(), delayed_actions()) -> ok.
-emit_timer_action_beats(_Options, _ID, _ReqCtx, #{new_timer := unchanged}) ->
-    ok;
-emit_timer_action_beats(Options, ID, ReqCtx, #{new_timer := undefined}) ->
+-spec emit_timer_action_beats(options(), mg_core:id(), request_context(), complex_action()) -> ok.
+emit_timer_action_beats(Options, ID, ReqCtx, #{timer := unset_timer}) ->
     #{namespace := NS, pulse := Pulse} = Options,
     mg_core_pulse:handle_beat(Pulse, #mg_core_timer_lifecycle_removed{
         namespace = NS,
         machine_id = ID,
         request_context = ReqCtx
     });
-emit_timer_action_beats(Options, ID, ReqCtx, #{new_timer := Timer}) ->
+emit_timer_action_beats(Options, ID, ReqCtx, #{timer := {set_timer, Timer, _, _}}) ->
     #{namespace := NS, pulse := Pulse} = Options,
-    {Timestamp, _TimerReqCtx, _TimerDeadline, _TimerHistory} = Timer,
     mg_core_pulse:handle_beat(Pulse, #mg_core_timer_lifecycle_created{
         namespace = NS,
         machine_id = ID,
         request_context = ReqCtx,
-        target_timestamp = Timestamp
-    }).
+        target_timestamp = timer_to_timestamp(Timer)
+    });
+emit_timer_action_beats(_Options, _ID, _ReqCtx, #{}) ->
+    ok.
 
 %%
 
--spec process_signal(
-    options(),
-    request_context(),
-    deadline(),
-    signal(),
-    machine(),
-    mg_core_events:events_range()
-) -> {ok, delayed_actions()}.
-process_signal(#{processor := Processor}, ReqCtx, Deadline, Signal, Machine, EventsRange) ->
+-spec process_signal(options(), request_context(), deadline(), signal(), machine(), state()) ->
+    {ok, state()}.
+process_signal(Options = #{processor := Processor}, ReqCtx, Deadline, Signal, Machine, State) ->
     SignalArgs = [ReqCtx, Deadline, {Signal, Machine}],
     {StateChange, ComplexAction} = mg_core_utils:apply_mod_opts(
         Processor,
         process_signal,
         SignalArgs
     ),
-    {ok, handle_processing_result(StateChange, ComplexAction, EventsRange, ReqCtx)}.
+    #{id := ID} = Machine,
+    NewState = handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, State),
+    {ok, NewState}.
 
--spec process_call(
-    options(),
-    request_context(),
-    deadline(),
-    term(),
-    machine(),
-    mg_core_events:events_range()
-) -> {_Resp, delayed_actions()}.
-process_call(#{processor := Processor}, ReqCtx, Deadline, Args, Machine, EventsRange) ->
+-spec process_call(options(), request_context(), deadline(), term(), machine(), state()) ->
+    {_Resp, state()}.
+process_call(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Machine, State) ->
     CallArgs = [ReqCtx, Deadline, {Args, Machine}],
     {Resp, StateChange, ComplexAction} = mg_core_utils:apply_mod_opts(
         Processor,
         process_call,
         CallArgs
     ),
-    {Resp, handle_processing_result(StateChange, ComplexAction, EventsRange, ReqCtx)}.
+    #{id := ID} = Machine,
+    NewState = handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, State),
+    {Resp, NewState}.
 
--spec process_repair(
-    options(),
-    request_context(),
-    deadline(),
-    term(),
-    machine(),
-    mg_core_events:events_range()
-) -> {ok, {mg_core_storage:opaque(), delayed_actions()}} | {error, repair_error()}.
-process_repair(#{processor := Processor}, ReqCtx, Deadline, Args, Machine, EventsRange) ->
+-spec process_repair(options(), request_context(), deadline(), term(), machine(), state()) ->
+    {ok, {_Resp, state()}} | {error, repair_error()}.
+process_repair(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Machine, State) ->
     RepairArgs = [ReqCtx, Deadline, {Args, Machine}],
     case mg_core_utils:apply_mod_opts(Processor, process_repair, RepairArgs) of
         {ok, {Resp, StateChange, ComplexAction}} ->
-            DelayedActions = handle_processing_result(
+            #{id := ID} = Machine,
+            NewState = handle_processing_result(
+                Options,
+                ID,
                 StateChange,
                 ComplexAction,
-                EventsRange,
-                ReqCtx
+                ReqCtx,
+                State
             ),
-            {ok, {Resp, DelayedActions}};
+            {ok, {Resp, NewState}};
         {error, _} = Error ->
             Error
     end.
 
 -spec handle_processing_result(
+    options(),
+    id(),
     state_change(),
     complex_action(),
-    mg_core_events:events_range(),
-    request_context()
-) -> delayed_actions().
-handle_processing_result(StateChange, ComplexAction, EventsRange, ReqCtx) ->
-    handle_state_change(
+    request_context(),
+    state()
+) ->
+    state().
+handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, StateWas) ->
+    {State, Events} = handle_state_change(
+        Options,
         StateChange,
-        EventsRange,
-        handle_complex_action(ComplexAction, #{}, ReqCtx)
-    ).
+        handle_complex_action(ComplexAction, ReqCtx, StateWas)
+    ),
+    % FIXME retry?
+    ok = store_events(Options, ID, ReqCtx, Events),
+    ok = emit_action_beats(Options, ID, ReqCtx, ComplexAction),
+    State.
 
--spec handle_state_change(state_change(), mg_core_events:events_range(), delayed_actions()) ->
-    delayed_actions().
-handle_state_change({AuxState, EventsBodies}, EventsRange, DelayedActions) ->
-    {Events, NewEventsRange} = mg_core_events:generate_events_with_range(EventsBodies, EventsRange),
-    DelayedActions#{
-        add_events => Events,
-        new_aux_state => AuxState,
-        new_events_range => NewEventsRange
-    }.
+-spec handle_state_change(options(), state_change(), state()) ->
+    {state(), [event()]}.
+handle_state_change(
+    Options,
+    {AuxState, EventsBodies},
+    StateWas = #{events_range := EventsRangeWas}
+) ->
+    {Events, EventsRange} = mg_core_events:generate_events_with_range(EventsBodies, EventsRangeWas),
+    DelayedActions = #{
+        % NOTE
+        % This is a range of events which are not yet pushed to event sinks
+        new_events_range => mg_core_events:diff_ranges(EventsRange, EventsRangeWas)
+    },
+    State = add_delayed_actions(
+        DelayedActions,
+        StateWas#{
+            events_range := EventsRange,
+            aux_state := AuxState
+        }
+    ),
+    split_events(Options, State, Events).
 
--spec handle_complex_action(complex_action(), delayed_actions(), request_context()) ->
-    delayed_actions().
-handle_complex_action(ComplexAction, DelayedActions, ReqCtx) ->
-    DelayedActions#{
+-spec handle_complex_action(complex_action(), request_context(), state()) ->
+    state().
+handle_complex_action(ComplexAction, ReqCtx, StateWas) ->
+    TimerAction = maps:get(timer, ComplexAction, undefined),
+    State = handle_timer_action(TimerAction, ReqCtx, StateWas),
+    DelayedActions = #{
         add_tag => maps:get(tag, ComplexAction, undefined),
-        new_timer => get_timer_action(maps:get(timer, ComplexAction, undefined), ReqCtx),
         remove => maps:get(remove, ComplexAction, undefined)
-    }.
+    },
+    add_delayed_actions(DelayedActions, State).
 
--spec get_timer_action(undefined | timer_action(), request_context()) ->
-    int_timer() | undefined | unchanged.
-get_timer_action(undefined, _) ->
-    unchanged;
-get_timer_action(unset_timer, _) ->
-    undefined;
-get_timer_action({set_timer, Timer, undefined, HandlingTimeout}, ReqCtx) ->
-    get_timer_action({set_timer, Timer, {undefined, undefined, forward}, HandlingTimeout}, ReqCtx);
-get_timer_action({set_timer, Timer, HRange, undefined}, ReqCtx) ->
-    get_timer_action({set_timer, Timer, HRange, 30}, ReqCtx);
-get_timer_action({set_timer, Timer, HRange, HandlingTimeout}, ReqCtx) ->
-    TimerDateTime =
-        case Timer of
-            {timeout, Timeout} ->
-                genlib_time:unow() + Timeout;
-            {deadline, Deadline} ->
-                genlib_time:daytime_to_unixtime(Deadline)
-        end,
-    {TimerDateTime, ReqCtx, HandlingTimeout * 1000, HRange}.
+-spec handle_timer_action(undefined | timer_action(), request_context(), state()) ->
+    state().
+handle_timer_action(undefined, _, State) ->
+    State;
+handle_timer_action(unset_timer, _, State) ->
+    State#{timer := undefined};
+handle_timer_action({set_timer, Timer, undefined, HandlingTimeout}, ReqCtx, State) ->
+    HRange = {undefined, undefined, forward},
+    handle_timer_action({set_timer, Timer, HRange, HandlingTimeout}, ReqCtx, State);
+handle_timer_action({set_timer, Timer, HRange, undefined}, ReqCtx, State) ->
+    handle_timer_action({set_timer, Timer, HRange, 30}, ReqCtx, State);
+handle_timer_action({set_timer, Timer, HRange, HandlingTimeout}, ReqCtx, State) ->
+    Timestamp = timer_to_timestamp(Timer),
+    State#{timer := {Timestamp, ReqCtx, HandlingTimeout * 1000, HRange}}.
+
+-spec timer_to_timestamp(timer()) -> genlib_time:ts().
+timer_to_timestamp({timeout, Timeout}) ->
+    erlang:system_time(second) + Timeout;
+timer_to_timestamp({deadline, Deadline}) ->
+    genlib_time:daytime_to_unixtime(Deadline).
 
 %%
 
@@ -646,48 +699,45 @@ get_option(Subj, Options) ->
 
 %%
 
--spec machine(
-    options(),
-    mg_core:id(),
-    state(),
-    [mg_core_events:event()],
-    mg_core_events:history_range()
-) -> machine().
-machine(Options = #{namespace := Namespace}, ID, State, ExtraEvents, HRange) ->
+-spec machine(options(), id(), state(), mg_core_events:history_range()) -> machine().
+machine(Options = #{namespace := Namespace}, ID, State, HRange) ->
     #{
-        events := Events,
         events_range := EventsRange,
         aux_state := AuxState,
         timer := Timer
     } = State,
-    Sources = [
-        RS
-     || RS = {Range, _Getter} <- [
-            {compute_events_range(Events), event_list_getter(Events)},
-            {compute_events_range(ExtraEvents), event_list_getter(ExtraEvents)},
-            {EventsRange, storage_event_getter(Options, ID)}
-        ],
-        Range /= undefined
-    ],
+    QueryRange = mg_core_events:intersect_range(EventsRange, HRange),
     #{
         ns => Namespace,
         id => ID,
-        history => get_events(Sources, EventsRange, HRange),
+        history => get_events(Options, ID, State, QueryRange),
         history_range => HRange,
         aux_state => AuxState,
         timer => Timer
     }.
 
--type event_getter() :: fun((mg_core_events:events_range()) -> [mg_core_events:event()]).
--type event_sources() :: [{mg_core_events:events_range(), event_getter()}, ...].
+-type event_getter() :: fun((events_range()) -> [mg_core_events:event()]).
+-type event_sources() :: [{events_range(), event_getter()}, ...].
 
--spec get_events(event_sources(), mg_core_events:events_range(), mg_core_events:history_range()) ->
-    [mg_core_events:event()].
-get_events(Sources, EventsRange, HRange) ->
-    lists:flatten(gather_events(Sources, mg_core_events:intersect_range(EventsRange, HRange))).
+-spec get_events(options(), id(), state(), events_range()) ->
+    [event()].
+get_events(_Options, _ID, _State, undefined) ->
+    [];
+get_events(Options, ID, #{events_range := EventsRange, events := EventStash}, FromRange) ->
+    StorageSource = {EventsRange, storage_event_getter(Options, ID)},
+    EventStashSource = {compute_events_range(EventStash), event_list_getter(EventStash)},
+    Sources = [
+        Source
+     || Source = {Range, _Getter} <- [EventStashSource, StorageSource],
+        Range /= undefined
+    ],
+    get_events(Sources, FromRange).
 
--spec gather_events(event_sources(), mg_core_events:events_range()) ->
-    [mg_core_events:event() | [mg_core_events:event()]].
+-spec get_events(event_sources(), events_range()) -> [event()].
+get_events(Sources, EventsRange) ->
+    lists:flatten(gather_events(Sources, EventsRange)).
+
+-spec gather_events(event_sources(), events_range()) -> [event() | [event()]].
 gather_events([{AvailRange, Getter} | Sources], EvRange) ->
     % NOTE
     % We find out which part of `EvRange` is covered by current source (which is `Range`)
@@ -720,8 +770,7 @@ gather_events([{AvailRange, Getter} | Sources], EvRange) ->
 gather_events([], _EvRange) ->
     [].
 
--spec concat_events([mg_core_events:event()], [mg_core_events:event()]) ->
-    [mg_core_events:event() | [mg_core_events:event()]].
+-spec concat_events([event()], [event()]) -> [event() | [event()]].
 concat_events(Events, []) ->
     Events;
 concat_events(Events, Acc) ->
@@ -739,16 +788,20 @@ event_list_getter(Events) ->
         mg_core_events:slice_events(Events, Range)
     end.
 
--spec try_apply_delayed_actions(state()) -> {state(), [mg_core_events:event()]} | undefined.
+-spec try_apply_delayed_actions(state()) -> state() | undefined.
 try_apply_delayed_actions(#{delayed_actions := undefined} = State) ->
-    {State, []};
-try_apply_delayed_actions(#{delayed_actions := DA = #{add_events := NewEvents}} = State) ->
+    State;
+try_apply_delayed_actions(#{delayed_actions := DA} = State) ->
     case apply_delayed_actions_to_state(DA, State) of
         NewState = #{} ->
-            {NewState, NewEvents};
+            NewState;
         remove ->
             undefined
     end.
+
+-spec reset_delayed_actions(state()) -> state().
+reset_delayed_actions(#{delayed_actions := DA} = State) when DA /= undefined ->
+    State#{delayed_actions := undefined}.
 
 -spec add_delayed_actions(delayed_actions(), state()) -> state().
 add_delayed_actions(DelayedActions, #{delayed_actions := undefined} = State) ->
@@ -764,29 +817,30 @@ add_delayed_action(add_tag, Tag, DelayedActions) ->
     % Deliberately discarding existing tag action here, even if, say, ongoing repair does not tag.
     % This is kind of a hack, yet this way repairs are more useful in practice.
     DelayedActions#{add_tag => Tag};
-%% Timer
-add_delayed_action(new_timer, unchanged, DelayedActions) ->
-    DelayedActions;
-add_delayed_action(new_timer, Timer, DelayedActions) ->
-    DelayedActions#{new_timer => Timer};
 %% Removing
 add_delayed_action(remove, undefined, DelayedActions) ->
     DelayedActions;
 add_delayed_action(remove, Remove, DelayedActions) ->
     DelayedActions#{remove => Remove};
-%% New events
-add_delayed_action(add_events, NewEvents, #{add_events := OldEvents} = DelayedActions) ->
-    DelayedActions#{add_events => OldEvents ++ NewEvents};
-%% AuxState changing
-add_delayed_action(new_aux_state, AuxState, DelayedActions) ->
-    DelayedActions#{new_aux_state => AuxState};
-%% Events range changing
+%% TODO ED-290
+%% Should be safe to drop after initial rollout, given there are no machines in production which
+%% became failed during continuation processing.
+add_delayed_action(new_events_range, Range, DelayedActions = #{add_events := NewEvents}) ->
+    % NOTE
+    % Preserve yet "unsinked" events in `new_events_range` so they'll get in event sinks next
+    % continuation.
+    NewEventsRange = compute_events_range(NewEvents),
+    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, NewEventsRange)};
 add_delayed_action(new_events_range, Range, DelayedActions) ->
-    DelayedActions#{new_events_range => Range}.
+    % NOTE
+    % Preserve yet "unsinked" events in `new_events_range` so they'll get in event sinks next
+    % continuation.
+    EventsRangeWas = maps:get(new_events_range, DelayedActions, mg_core_dirange:empty()),
+    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, EventsRangeWas)}.
 
 -spec compute_events_range([mg_core_events:event()]) -> mg_core_events:events_range().
 compute_events_range([]) ->
-    undefined;
+    mg_core_dirange:empty();
 compute_events_range([#{id := ID} | _] = Events) ->
     mg_core_dirange:forward(ID, ID + erlang:length(Events) - 1).
 
@@ -863,28 +917,22 @@ opaque_to_state([4, EventsRange, AuxState, DelayedActions, Timer, Events]) ->
 -spec delayed_actions_to_opaque(delayed_actions()) -> mg_core_storage:opaque().
 delayed_actions_to_opaque(undefined) ->
     null;
-delayed_actions_to_opaque(DelayedActions) ->
-    #{
-        add_tag := Tag,
-        new_timer := Timer,
-        add_events := Events,
-        new_aux_state := AuxState,
-        new_events_range := EventsRange,
-        remove := Remove
-    } = DelayedActions,
+delayed_actions_to_opaque(
+    #{add_tag := Tag, remove := Remove, new_events_range := NewEventsRange}
+) ->
     [
-        3,
+        4,
         mg_core_events:maybe_to_opaque(Tag, fun mg_core_events:identity/1),
-        mg_core_events:maybe_to_opaque(Timer, fun delayed_timer_actions_to_opaque/1),
         mg_core_events:maybe_to_opaque(Remove, fun remove_to_opaque/1),
-        mg_core_events:events_to_opaques(Events),
-        mg_core_events:content_to_opaque(AuxState),
-        mg_core_events:events_range_to_opaque(EventsRange)
+        mg_core_events:events_range_to_opaque(NewEventsRange)
     ].
 
 -spec opaque_to_delayed_actions(mg_core_storage:opaque()) -> delayed_actions().
 opaque_to_delayed_actions(null) ->
     undefined;
+% TODO ED-290
+% Should be safe to drop legacy unmarshalling after initial rollout, given there are no machines
+% in production which became failed during continuation processing.
 opaque_to_delayed_actions([1, Tag, Timer, Events, AuxState, EventsRange]) ->
     #{
         add_tag => mg_core_events:maybe_from_opaque(Tag, fun mg_core_events:identity/1),
@@ -912,13 +960,13 @@ opaque_to_delayed_actions([3, Tag, Timer, Remove, Events, AuxState, EventsRange]
     ]),
     DelayedActions#{
         new_aux_state := mg_core_events:opaque_to_content(AuxState)
+    };
+opaque_to_delayed_actions([4, Tag, Remove, EventsRange]) ->
+    #{
+        add_tag => mg_core_events:maybe_from_opaque(Tag, fun mg_core_events:identity/1),
+        remove => mg_core_events:maybe_from_opaque(Remove, fun opaque_to_remove/1),
+        new_events_range => mg_core_events:opaque_to_events_range(EventsRange)
     }.
-
--spec delayed_timer_actions_to_opaque(genlib_time:ts() | unchanged) -> mg_core_storage:opaque().
-delayed_timer_actions_to_opaque(unchanged) ->
-    <<"unchanged">>;
-delayed_timer_actions_to_opaque(Timer) ->
-    int_timer_to_opaque(Timer).
 
 -spec opaque_to_delayed_timer_actions(mg_core_storage:opaque()) ->
     genlib_time:ts() | undefined | unchanged.
