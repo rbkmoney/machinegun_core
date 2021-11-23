@@ -376,7 +376,7 @@ process_machine_(
         end,
     {FlowAction, State2} =
         case try_apply_delayed_actions(State1) of
-            remove ->
+            undefined ->
                 {remove, State1};
             StateNext ->
                 {state_to_flow_action(StateNext), StateNext}
