@@ -30,6 +30,7 @@
 -export([dissect/2]).
 -export([conjoin/2]).
 -export([intersect/2]).
+-export([unify/2]).
 -export([limit/2]).
 -export([fold/3]).
 -export([enumerate/1]).
@@ -137,6 +138,14 @@ intersect(R0, With) ->
     {LeftDiff, R1} = dissect(R0, WA - D0),
     {Intersection, RightDiff} = dissect(R1, WB),
     {LeftDiff, Intersection, RightDiff}.
+
+-spec unify(dirange(T), dirange(T)) -> dirange(T).
+unify(R, undefined) ->
+    R;
+unify(undefined, R) ->
+    R;
+unify({A1, B1, D}, {A2, B2, D}) ->
+    {min(A1 * D, A2 * D) * D, max(B1 * D, B2 * D) * D, D}.
 
 -spec limit(dirange(T), non_neg_integer()) -> dirange(T).
 limit(undefined, _) ->
