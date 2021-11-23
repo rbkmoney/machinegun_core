@@ -41,7 +41,7 @@
 -export([to/1]).
 
 %% Directed range over integers
--opaque dirange(_T) :: nonempty_dirange(_T) | undefined.
+-type dirange(_T) :: nonempty_dirange(_T) | undefined.
 -type direction() :: -1 | +1.
 -type nonempty_dirange(_T) ::
     % Non-empty, unambiguously oriented directed range [from..to].
