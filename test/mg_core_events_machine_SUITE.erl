@@ -29,6 +29,8 @@
 -export([continuation_repair_test/1]).
 -export([double_tag_repair_test/1]).
 -export([get_corrupted_machine_fails/1]).
+-export([ed_209_migration_simple_succeeds/1]).
+-export([ed_209_migration_repair_succeeds/1]).
 
 %% mg_core_events_machine handler
 -behaviour(mg_core_events_machine).
@@ -80,7 +82,9 @@ all() ->
         get_events_test,
         continuation_repair_test,
         double_tag_repair_test,
-        get_corrupted_machine_fails
+        get_corrupted_machine_fails,
+        ed_209_migration_simple_succeeds,
+        ed_209_migration_repair_succeeds
     ].
 
 -spec init_per_suite(config()) -> config().
@@ -288,6 +292,104 @@ get_corrupted_machine_fails(_C) ->
     _ = ?assertError(_, get_history(Options, MachineID)),
     ok = stop_automaton(Pid).
 
+-spec ed_209_migration_simple_succeeds(config()) -> any().
+ed_209_migration_simple_succeeds(C) ->
+    ed_209_migration_scenario_succeeds(simple, C).
+
+-spec ed_209_migration_repair_succeeds(config()) -> any().
+ed_209_migration_repair_succeeds(C) ->
+    ed_209_migration_scenario_succeeds(repair, C).
+
+-define(ED_209_STASH_SIZE, 5).
+-define(ED_209_INITIAL_EVENTS, 8).
+-define(ED_209_EMITTED_EVENTS, 4).
+
+-spec ed_209_migration_scenario_succeeds(simple | repair, config()) -> any().
+ed_209_migration_scenario_succeeds(Scenario, C) ->
+    NS = <<"ED-209">>,
+    {ok, StoragePid} = mg_core_storage_memory:start_link(#{name => ?MODULE}),
+    StorageOpts = #{existing_storage_name => ?MODULE},
+    RunnerPid = self(),
+    SignalHandler = fun({init, N}, _AuxState, []) ->
+        {0, lists:seq(1, N), #{}}
+    end,
+    RepairHandler = fun({HSize, AuxStateIn, {emit, N}}, AuxState, History) ->
+        AuxState = AuxStateIn,
+        History = lists:seq(1, HSize),
+        {ok, AuxState + 1, lists:seq(HSize + 1, HSize + N), #{}}
+    end,
+    CallHandler = fun({emit, N}, AuxState, History) ->
+        HSize = length(History),
+        {ok, AuxState + 1, lists:seq(HSize + 1, HSize + N), #{}}
+    end,
+    SinkHandler = fun(Events) ->
+        FailOn = persistent_term:get({?FUNCTION_NAME, fail_event_sink_on}, []),
+        case Events -- FailOn of
+            Events ->
+                _ = [RunnerPid ! Event || Event <- Events],
+                ok;
+            _FailThen ->
+                erlang:error({failed_event_sink_on, FailOn})
+        end
+    end,
+    ProcessorOpts = #{
+        signal_handler => SignalHandler,
+        call_handler => CallHandler,
+        repair_handler => RepairHandler,
+        sink_handler => SinkHandler
+    },
+    BaseOpts = #{event_stash_size => ?ED_209_STASH_SIZE},
+    Options = events_machine_options(BaseOpts, StorageOpts, ProcessorOpts, NS),
+    MachineID = genlib:to_binary(Scenario),
+
+    % Fire up pre-ED-290 automaton
+    {ok, Pid1} = mg_core_events_machine_pre_ed290:start_link(Options),
+    ?assertEqual(ok, start(Options, MachineID, ?ED_209_INITIAL_EVENTS)),
+    % Fail machine mid-continuation, yet with additional `NumPushedEvents` in state
+    ok = persistent_term:put({?FUNCTION_NAME, fail_event_sink_on}, [?ED_209_INITIAL_EVENTS + 1]),
+    ?assertThrow({logic, machine_failed}, call(Options, MachineID, {emit, ?ED_209_EMITTED_EVENTS})),
+    ok = stop_automaton(Pid1),
+
+    % Ensure sink handler fails no more
+    true = persistent_term:erase({?FUNCTION_NAME, fail_event_sink_on}),
+
+    % Fire up current automaton, with existing machine state in storage
+    {ok, Pid2} = mg_core_events_machine:start_link(Options),
+    % Verify migration scenario
+    _ = ed_209_migration_scenario_succeeds(Options, MachineID, Scenario, C),
+    ok = stop_automaton(Pid2),
+
+    ok = proc_lib:stop(StoragePid, normal, 5000).
+
+-spec ed_209_migration_scenario_succeeds(options(), mg_core:id(), simple | repair, config()) ->
+    any().
+ed_209_migration_scenario_succeeds(Options, MachineID, simple, _C) ->
+    NumEvents1 = ?ED_209_INITIAL_EVENTS + ?ED_209_EMITTED_EVENTS,
+    ?assertEqual({_AuxState1 = 1, mk_seq_history(NumEvents1)}, get_machine(Options, MachineID)),
+    ?assertEqual(ok, simple_repair(Options, MachineID)),
+    ?assertEqual({_AuxState2 = 1, mk_seq_history(NumEvents1)}, get_machine(Options, MachineID)),
+    NumFreshEvents = 7,
+    NumEvents2 = NumEvents1 + NumFreshEvents,
+    ?assertEqual(ok, call(Options, MachineID, {emit, NumFreshEvents})),
+    ?assertEqual({_AuxState3 = 2, mk_seq_history(NumEvents2)}, get_machine(Options, MachineID)),
+    ?assertEqual(lists:seq(1, NumEvents2), _SinkEvents = ?flushMailbox());
+ed_209_migration_scenario_succeeds(Options, MachineID, repair, _C) ->
+    NumEvents1 = ?ED_209_INITIAL_EVENTS + ?ED_209_EMITTED_EVENTS,
+    ?assertEqual({_AuxState1 = 1, mk_seq_history(NumEvents1)}, get_machine(Options, MachineID)),
+    NumRepairEvents = 1,
+    ?assertEqual(ok, repair(Options, MachineID, {NumEvents1, 1, {emit, NumRepairEvents}})),
+    NumEvents2 = NumEvents1 + NumRepairEvents,
+    ?assertEqual({_AuxState2 = 2, mk_seq_history(NumEvents2)}, get_machine(Options, MachineID)),
+    NumFreshEvents = 7,
+    NumEvents3 = NumEvents2 + NumFreshEvents,
+    ?assertEqual(ok, call(Options, MachineID, {emit, NumFreshEvents})),
+    ?assertEqual({_AuxState3 = 3, mk_seq_history(NumEvents3)}, get_machine(Options, MachineID)),
+    ?assertEqual(lists:seq(1, NumEvents3), _SinkEvents = ?flushMailbox()).
+
+-spec mk_seq_history(pos_integer()) -> history().
+mk_seq_history(Size) ->
+    [{N, N} || N <- lists:seq(1, Size)].
+
 %% Processor handlers
 
 -spec process_signal(options(), req_ctx(), deadline(), mg_core_events_machine:signal_args()) ->
@@ -481,17 +583,37 @@ repair(Options, MachineID, Args) ->
     ),
     decode(Response).
 
+-spec simple_repair(mg_core_events_machine:options(), mg_core:id()) -> ok.
+simple_repair(Options, MachineID) ->
+    Deadline = mg_core_deadline:from_timeout(3000),
+    mg_core_events_machine:simple_repair(
+        Options,
+        {id, MachineID},
+        <<>>,
+        Deadline
+    ).
+
 -spec get_history(mg_core_events_machine:options(), mg_core:id()) -> history().
 get_history(Options, MachineID) ->
-    HRange = {undefined, undefined, forward},
-    get_history(Options, MachineID, HRange).
+    {_AuxState, History} = get_machine(Options, MachineID),
+    History.
 
 -spec get_history(mg_core_events_machine:options(), mg_core:id(), mg_core_events:history_range()) ->
     history().
 get_history(Options, MachineID, HRange) ->
-    Machine = mg_core_events_machine:get_machine(Options, {id, MachineID}, HRange),
-    {_AuxState, History} = decode_machine(Machine),
+    {_AuxState, History} = get_machine(Options, MachineID, HRange),
     History.
+
+-spec get_machine(mg_core_events_machine:options(), mg_core:id()) -> {aux_state(), history()}.
+get_machine(Options, MachineID) ->
+    HRange = {undefined, undefined, forward},
+    get_machine(Options, MachineID, HRange).
+
+-spec get_machine(mg_core_events_machine:options(), mg_core:id(), mg_core_events:history_range()) ->
+    {aux_state(), history()}.
+get_machine(Options, MachineID, HRange) ->
+    Machine = mg_core_events_machine:get_machine(Options, {id, MachineID}, HRange),
+    decode_machine(Machine).
 
 -spec extract_events(history()) -> [event()].
 extract_events(History) ->
