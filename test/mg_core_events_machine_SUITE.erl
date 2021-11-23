@@ -258,11 +258,14 @@ get_corrupted_machine_fails(_C) ->
     MachineID = genlib:to_binary(?FUNCTION_NAME),
     LoseEvery = 4,
     ProcessorOpts = #{
-        signal_handler => fun({init, <<>>}, AuxState, []) ->
-            {AuxState, [], #{}}
+        signal_handler => fun
+            ({init, <<>>}, _AuxState, []) ->
+                {0, [], #{}};
+            (timeout, N, _) ->
+                {0, [I || I <- lists:seq(1, N)], #{}}
         end,
-        call_handler => fun({emit, N}, AuxState, _) ->
-            {ok, AuxState, [I || I <- lists:seq(1, N)], #{}}
+        call_handler => fun({emit, N}, _AuxState, _) ->
+            {ok, N, [], #{timer => {set_timer, {timeout, 0}, undefined, undefined}}}
         end
     },
     BaseOptions = events_machine_options(
@@ -281,6 +284,7 @@ get_corrupted_machine_fails(_C) ->
     ok = start(Options, MachineID, <<>>),
     _ = ?assertEqual([], get_history(Options, MachineID)),
     ok = call(Options, MachineID, {emit, LoseEvery * 2}),
+    ok = timer:sleep(1000),
     _ = ?assertError(_, get_history(Options, MachineID)),
     ok = stop_automaton(Pid).
 
@@ -399,7 +403,10 @@ when
     BaseOptions :: mg_core_events_machine:options(),
     StorageOptions :: mg_core_storage:storage_options().
 events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
-    Scheduler = #{},
+    Scheduler = #{
+        min_scan_delay => 1000,
+        target_cutoff => 15
+    },
     Options = maps:merge(
         #{
             pulse => ?MODULE,
@@ -435,7 +442,7 @@ events_machine_options(Base, StorageOptions, ProcessorOptions, NS) ->
             schedulers => #{
                 timers => Scheduler,
                 timers_retries => Scheduler,
-                overseer => Scheduler
+                overseer => #{}
             }
         },
         events_storage => mg_core_ct_helper:build_storage(<<NS/binary, "_events">>, Storage)
