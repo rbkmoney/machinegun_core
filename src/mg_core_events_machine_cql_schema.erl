@@ -68,7 +68,7 @@ write_changes(Fun, Things, V, Was, Query) ->
         Things
     ).
 
-write_changed(_, _, V, V, Query) ->
+write_changed(_, _, V1, V2, Query) when V1 =:= V2 ->
     Query;
 write_changed(Fun, Thing, V, Was, Query) ->
     Fun(Thing, V, Was, Query).
