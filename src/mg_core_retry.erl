@@ -24,6 +24,8 @@
 -export_type([strategy/0]).
 -export([new_strategy/1]).
 -export([new_strategy/3]).
+-export([constrain/2]).
+-export([do/2]).
 
 -type retries_num() :: pos_integer() | infinity.
 -type policy() ::
@@ -61,6 +63,31 @@ new_strategy(PolicySpec, _InitialTimestamp, Attempt) ->
     %% TODO: Use InitialTimestamp
     Strategy = new_strategy(PolicySpec),
     skip_steps(Strategy, Attempt).
+
+-spec constrain(strategy(), mg_core_deadline:deadline()) -> strategy().
+constrain(Strategy, undefined) ->
+    Strategy;
+constrain(Strategy, Deadline) ->
+    Timeout = mg_core_deadline:to_timeout(Deadline),
+    genlib_retry:timecap(Timeout, Strategy).
+
+-type throws(_Reason) :: no_return().
+
+-spec do(strategy(), fun(() -> R | throws({transient, _}))) -> R | throws(_).
+do(Strategy, Fun) ->
+    try
+        Fun()
+    catch
+        throw:(Reason = {transient, _}):ST ->
+            NextStep = genlib_retry:next_step(Strategy),
+            case NextStep of
+                {wait, Timeout, NewStrategy} ->
+                    ok = timer:sleep(Timeout),
+                    do(NewStrategy, Fun);
+                finish ->
+                    erlang:raise(throw, Reason, ST)
+            end
+    end.
 
 %% Internals
 

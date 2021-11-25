@@ -56,6 +56,8 @@
 -behaviour(mg_core_machine).
 -export([processor_child_spec/1, process_machine/7]).
 
+-define(DEFAULT_RETRY_POLICY, {exponential, infinity, 2, 10, 60 * 1000}).
+
 %%
 %% API
 %%
@@ -124,6 +126,7 @@
     processor => mg_core_utils:mod_opts(),
     tagging => mg_core_machine_tags:options(),
     machines => mg_core_machine:options(),
+    retries => #{_Subject => mg_core_retry:policy()},
     pulse => mg_core_pulse:handler(),
     event_sinks => [mg_core_events_sink:handler()],
     default_processing_timeout => timeout(),
@@ -358,7 +361,7 @@ process_machine_(
         case DelayedActions of
             #{add_events := Events} ->
                 {State, ExternalEvents} = split_events(Options, State0, Events),
-                ok = store_events(Options, ID, ReqCtx, ExternalEvents),
+                ok = store_events(Options, ID, ExternalEvents),
                 % NOTE
                 % Doing this so these `Events` won't duplicate in state later on, in
                 % `try_apply_delayed_actions/1`, since it hijacks event stash.
@@ -446,8 +449,17 @@ split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEve
             {State#{events => Events}, []}
     end.
 
--spec store_events(options(), id(), request_context(), [event()]) -> ok.
-store_events(Options, ID, _RequestContext, Events) ->
+-spec retry_store_events(options(), id(), deadline(), [event()]) -> ok.
+retry_store_events(Options, ID, Deadline, Events) ->
+    % TODO ED-324
+    % We won't notice transient errors here, guess we need them right at the storage level.
+    ok = mg_core_retry:do(
+        get_retry_strategy(Options, storage, Deadline),
+        fun() -> store_events(Options, ID, Events) end
+    ).
+
+-spec store_events(options(), id(), [event()]) -> ok.
+store_events(Options, ID, Events) ->
     mg_core_events_storage:store_events(Options, ID, Events).
 
 -spec update_event_sinks(options(), id(), request_context(), deadline(), state()) -> ok.
@@ -567,7 +579,15 @@ process_signal(Options = #{processor := Processor}, ReqCtx, Deadline, Signal, Ma
         SignalArgs
     ),
     #{id := ID} = Machine,
-    NewState = handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, State),
+    NewState = handle_processing_result(
+        Options,
+        ID,
+        StateChange,
+        ComplexAction,
+        ReqCtx,
+        Deadline,
+        State
+    ),
     {ok, NewState}.
 
 -spec process_call(options(), request_context(), deadline(), term(), machine(), state()) ->
@@ -580,7 +600,15 @@ process_call(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Machin
         CallArgs
     ),
     #{id := ID} = Machine,
-    NewState = handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, State),
+    NewState = handle_processing_result(
+        Options,
+        ID,
+        StateChange,
+        ComplexAction,
+        ReqCtx,
+        Deadline,
+        State
+    ),
     {Resp, NewState}.
 
 -spec process_repair(options(), request_context(), deadline(), term(), machine(), state()) ->
@@ -596,6 +624,7 @@ process_repair(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Mach
                 StateChange,
                 ComplexAction,
                 ReqCtx,
+                Deadline,
                 State
             ),
             {ok, {Resp, NewState}};
@@ -609,17 +638,17 @@ process_repair(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Mach
     state_change(),
     complex_action(),
     request_context(),
+    deadline(),
     state()
 ) ->
     state().
-handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, StateWas) ->
+handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, Deadline, StateWas) ->
     {State, Events} = handle_state_change(
         Options,
         StateChange,
         handle_complex_action(ComplexAction, ReqCtx, StateWas)
     ),
-    % FIXME retry?
-    ok = store_events(Options, ID, ReqCtx, Events),
+    ok = retry_store_events(Options, ID, Deadline, Events),
     ok = emit_action_beats(Options, ID, ReqCtx, ComplexAction),
     State.
 
@@ -1005,6 +1034,14 @@ int_timer_to_opaque({Timestamp, ReqCtx, HandlingTimeout, HRange}) ->
 -spec opaque_to_int_timer(mg_core_storage:opaque()) -> int_timer().
 opaque_to_int_timer([1, Timestamp, ReqCtx, HandlingTimeout, HRange]) ->
     {Timestamp, ReqCtx, HandlingTimeout, mg_core_events:opaque_to_history_range(HRange)}.
+
+%%
+
+-spec get_retry_strategy(options(), _Subject :: storage, deadline()) -> mg_core_retry:strategy().
+get_retry_strategy(Options, Subject, Deadline) ->
+    Retries = maps:get(retries, Options, #{}),
+    Policy = maps:get(Subject, Retries, ?DEFAULT_RETRY_POLICY),
+    mg_core_retry:constrain(mg_core_retry:new_strategy(Policy), Deadline).
 
 %%
 

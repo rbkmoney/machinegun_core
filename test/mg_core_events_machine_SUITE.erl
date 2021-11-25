@@ -126,7 +126,8 @@ get_events_test(_C) ->
                 event_stash_size => rand:uniform(2 * I)
             },
             StorageOpts = #{
-                batching => #{concurrency_limit => rand:uniform(5 * I)}
+                batching => #{concurrency_limit => rand:uniform(5 * I)},
+                random_transient_fail => #{put => 0.1 / N}
             },
             Options = events_machine_options(BaseOpts, StorageOpts, ProcessorOpts, NS),
             ct:pal("Options = ~p", [Options]),
