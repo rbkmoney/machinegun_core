@@ -76,7 +76,7 @@ modernize_machine(Options, EventsMachineOptions, ReqCtx, Ref, HRange) ->
 
 -spec update_event(mg_core_events:event(), modernized_event_body()) -> mg_core_events:event().
 update_event(Event = #{body := Body}, ModernizedBody) ->
-    case Versions = {get_format_version(Body), get_format_version(ModernizedBody)} of
+    case {get_format_version(Body), get_format_version(ModernizedBody)} of
         {undefined, _} ->
             % _Любое_ обновлённое представление данных, не имевших версии, достойно лечь в базу.
             Event#{body := ModernizedBody};
@@ -88,7 +88,7 @@ update_event(Event = #{body := Body}, ModernizedBody) ->
             % случай для сценариев, когда модернизатор ещё не обновился и не знает, как обновить
             % данные; в таком случае ему пожалуй будет проще вернуть их в неизменном виде.
             Event;
-        _ ->
+        Versions ->
             % Обновлённое представление проверсионированных данных c более младшей версией или даже
             % без неё. Это нарушение протокола, лучше вылететь с ошибкой?
             erlang:throw({logic, {invalid_modernized_version, Versions}})
