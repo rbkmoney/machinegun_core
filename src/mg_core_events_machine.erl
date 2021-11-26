@@ -824,7 +824,7 @@ event_list_getter(Events) ->
         mg_core_events:slice_events(Events, Range)
     end.
 
--spec try_apply_delayed_actions(state()) -> state() | undefined.
+-spec maybe_apply_delayed_actions(state()) -> state() | undefined.
 try_apply_delayed_actions(#{delayed_actions := undefined} = State) ->
     State;
 maybe_apply_delayed_actions(#{delayed_actions := DA} = State) ->
