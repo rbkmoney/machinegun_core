@@ -360,7 +360,7 @@ process_machine_(
     State1 =
         case DelayedActions of
             #{add_events := Events} ->
-                {State, ExternalEvents} = split_events(Options, State0, Events),
+                {State, ExternalEvents} = maybe_stash_events(Options, State0, Events),
                 ok = store_events(Options, ID, ExternalEvents),
                 % NOTE
                 % Doing this so these `Events` won't duplicate in state later on, in
@@ -436,9 +436,9 @@ add_tag(Options, ID, ReqCtx, Deadline, Tag) ->
             end
     end.
 
--spec split_events(options(), state(), [event()]) ->
+-spec maybe_stash_events(options(), state(), [event()]) ->
     {state(), [mg_core_events:event()]}.
-split_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEvents) ->
+maybe_stash_events(#{event_stash_size := Max}, State = #{events := EventStash}, NewEvents) ->
     Events = EventStash ++ NewEvents,
     NumEvents = erlang:length(Events),
     case NumEvents > Max of
@@ -672,7 +672,7 @@ handle_state_change(
             aux_state := AuxState
         }
     ),
-    split_events(Options, State, Events).
+    maybe_stash_events(Options, State, Events).
 
 -spec diff_event_ranges(events_range(), events_range()) -> events_range().
 diff_event_ranges(LHS, undefined) ->
