@@ -346,7 +346,7 @@ ed209_migration_scenario_succeeds(Scenario, C) ->
     % Fire up pre-ED-290 automaton
     {ok, Pid1} = mg_core_events_machine_pre_ed290:start_link(Options),
     ?assertEqual(ok, start(Options, MachineID, ?ED_209_INITIAL_EVENTS)),
-    % Fail machine mid-continuation, yet with additional `NumPushedEvents` in state
+    % Fail machine mid-continuation, yet with handful of additional events in state
     ok = persistent_term:put({?FUNCTION_NAME, fail_event_sink_on}, [?ED_209_INITIAL_EVENTS + 1]),
     ?assertThrow({logic, machine_failed}, call(Options, MachineID, {emit, ?ED_209_EMITTED_EVENTS})),
     ok = stop_automaton(Pid1),
