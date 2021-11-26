@@ -214,7 +214,7 @@ get_machine(Options, Ref, HRange) ->
     % нужно понимать, что эти операции разнесены по времени, и тут могут быть рэйсы
     ID = ref2id(Options, Ref),
     InitialState = opaque_to_state(mg_core_machine:get(machine_options(Options), ID)),
-    EffectiveState = try_apply_delayed_actions(InitialState),
+    EffectiveState = maybe_apply_delayed_actions(InitialState),
     _ = mg_core_utils:throw_if_undefined(EffectiveState, {logic, machine_not_found}),
     machine(Options, ID, EffectiveState, HRange).
 
