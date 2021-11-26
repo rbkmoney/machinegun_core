@@ -326,7 +326,7 @@ process_machine_(Options, ID, {Subj, {Args, HRange}}, _, ReqCtx, Deadline, State
     % We won't handle `undefined` here though it's possible, yet extremely unlikely.
     % Imagine a machine ordered to be removed failed during continuation, and then someone tries
     % to repair it.
-    EffectiveState = try_apply_delayed_actions(State),
+    EffectiveState = maybe_apply_delayed_actions(State),
     Machine = machine(Options, ID, EffectiveState, HRange),
     % TODO ED-290
     % Keeping original state intact shouldn't be needed after initial rollout?
