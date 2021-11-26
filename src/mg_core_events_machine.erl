@@ -825,7 +825,7 @@ event_list_getter(Events) ->
     end.
 
 -spec maybe_apply_delayed_actions(state()) -> state() | undefined.
-try_apply_delayed_actions(#{delayed_actions := undefined} = State) ->
+maybe_apply_delayed_actions(#{delayed_actions := undefined} = State) ->
     State;
 maybe_apply_delayed_actions(#{delayed_actions := DA} = State) ->
     case apply_delayed_actions_to_state(DA, State) of
