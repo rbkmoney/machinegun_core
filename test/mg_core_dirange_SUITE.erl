@@ -30,6 +30,7 @@
 -export([conjoin_test/1]).
 -export([dissect_test/1]).
 -export([intersect_test/1]).
+-export([unify_test/1]).
 -export([enumerate_test/1]).
 -export([fold_test/1]).
 -export([storage_test/1]).
@@ -51,6 +52,7 @@ all() ->
         dissect_test,
         conjoin_test,
         intersect_test,
+        unify_test,
         enumerate_test,
         fold_test,
         storage_test
@@ -229,6 +231,39 @@ intersect_test(_) ->
                 {RL, RI, RR} = mg_core_dirange:intersect(R0, RWith),
                 equals(R0, mg_core_dirange:conjoin(mg_core_dirange:conjoin(RL, RI), RR))
             end)
+        )
+    ).
+
+-spec unify_test(config()) -> _.
+unify_test(_) ->
+    ?assert(
+        check_property(
+            % Range is the same when unified with itself
+            ?FORALL(
+                R,
+                range(),
+                equals(R, mg_core_dirange:unify(R, R))
+            )
+        )
+    ),
+    ?assert(
+        check_property(
+            % Unified range is no smaller than either of ranges
+            ?FORALL(
+                {R0, R1},
+                ?SUCHTHAT(
+                    {R0, R1},
+                    {range(), range()},
+                    mg_core_dirange:direction(R0) == mg_core_dirange:direction(R1)
+                ),
+                begin
+                    RU = mg_core_dirange:unify(R0, R1),
+                    conjunction([
+                        {no_smaller_than_r0, mg_core_dirange:size(RU) >= mg_core_dirange:size(R0)},
+                        {no_smaller_than_r1, mg_core_dirange:size(RU) >= mg_core_dirange:size(R1)}
+                    ])
+                end
+            )
         )
     ).
 

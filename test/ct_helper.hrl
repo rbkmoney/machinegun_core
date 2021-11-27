@@ -1,15 +1,13 @@
 -ifndef(__mg_core_ct_helper__).
 -define(__mg_core_ct_helper__, 42).
 
--define(flushMailbox(__Acc0),
-    (fun __Flush(__Acc) ->
+-define(flushMailbox(),
+    (fun __Flush() ->
         receive
-            __M -> __Flush([__M | __Acc])
-        after 0 -> __Acc
+            __M -> [__M | __Flush()]
+        after 0 -> []
         end
-    end)(
-        __Acc0
-    )
+    end)()
 ).
 
 -define(assertReceive(__Expr),
@@ -26,7 +24,7 @@
                     {module, ?MODULE},
                     {line, ?LINE},
                     {expression, (??__Expr)},
-                    {mailbox, ?flushMailbox([])}
+                    {mailbox, ?flushMailbox()}
                 ]}
             )
         end
@@ -45,7 +43,7 @@
                     {assertNoReceive, [
                         {module, ?MODULE},
                         {line, ?LINE},
-                        {mailbox, ?flushMailbox([__Message])}
+                        {mailbox, [__Message | ?flushMailbox()]}
                     ]}
                 )
         after __Timeout -> ok

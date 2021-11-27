@@ -1090,20 +1090,8 @@ retry_strategy(Subj, Options, Deadline) ->
 retry_strategy(Subj, Options, Deadline, InitialTs, Attempt) ->
     Retries = maps:get(retries, Options, #{}),
     Policy = maps:get(Subj, Retries, ?DEFAULT_RETRY_POLICY),
-    constrain_retry_strategy(Policy, Deadline, InitialTs, Attempt).
-
--spec constrain_retry_strategy(Policy, Deadline, InitialTs, Attempt) ->
-    mg_core_retry:strategy()
-when
-    Policy :: mg_core_retry:policy(),
-    Deadline :: deadline(),
-    InitialTs :: genlib_time:ts() | undefined,
-    Attempt :: non_neg_integer() | undefined.
-constrain_retry_strategy(Policy, undefined, InitialTs, Attempt) ->
-    mg_core_retry:new_strategy(Policy, InitialTs, Attempt);
-constrain_retry_strategy(Policy, Deadline, InitialTs, Attempt) ->
-    Timeout = mg_core_deadline:to_timeout(Deadline),
-    mg_core_retry:new_strategy({timecap, Timeout, Policy}, InitialTs, Attempt).
+    Strategy = mg_core_retry:new_strategy(Policy, InitialTs, Attempt),
+    mg_core_retry:constrain(Strategy, Deadline).
 
 -spec emit_pre_process_beats(processor_impact(), request_context(), deadline(), state()) -> ok.
 emit_pre_process_beats(Impact, ReqCtx, Deadline, State) ->

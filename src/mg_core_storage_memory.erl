@@ -50,9 +50,10 @@ start_link(Options) ->
         name := name(),
         pulse := mg_core_pulse:handler(),
         existing_storage_name => name(),
-        random_transient_fail => float()
+        random_transient_fail => random_fail_policy()
     }.
 -type continuation() :: binary() | undefined.
+-type random_fail_policy() :: float() | #{get | put | delete | search := float()}.
 -type name() :: mg_core_storage:name().
 
 -spec child_spec(options(), atom()) -> supervisor:child_spec() | undefined.
@@ -68,7 +69,7 @@ child_spec(Options, ChildID) ->
 
 -spec do_request(options(), mg_core_storage:request()) -> mg_core_storage:response().
 do_request(Options, Req) ->
-    random_fail(Options, fun() ->
+    random_fail(Options, Req, fun() ->
         RealName = get_name(Options),
         gen_server:call(ref(RealName), Req)
     end).
@@ -342,20 +343,30 @@ do_cleanup_index(Key, Index) ->
         Index
     ).
 
--spec random_fail(options(), fun(() -> T)) -> T | no_return() when T :: any().
-random_fail(#{random_transient_fail := Border}, Fun) ->
-    Prob = rand:uniform(),
-    ok = try_fail(Prob, (Border / 2), {transient, {storage_unavailable, random_fail}}),
+-spec random_fail(options(), mg_core_storage:request(), fun(() -> T)) ->
+    T | no_return().
+random_fail(#{random_transient_fail := Policy}, Request, Fun) ->
+    Prob = get_random_fail_prob(Policy, Request),
+    Roll = rand:uniform(),
+    ok = try_fail(Roll, (Prob / 2), {transient, {storage_unavailable, random_fail}}),
     Result = Fun(),
-    ok = try_fail(Prob, Border, {transient, {storage_unavailable, random_fail}}),
+    ok = try_fail(Roll, Prob, {transient, {storage_unavailable, random_fail}}),
     Result;
-random_fail(_, Fun) ->
+random_fail(_, _, Fun) ->
     Fun().
 
+-spec get_random_fail_prob(random_fail_policy(), mg_core_storage:request()) -> float().
+get_random_fail_prob(#{get := Prob}, {get, _}) -> Prob;
+get_random_fail_prob(#{put := Prob}, {put, _, _, _, _}) -> Prob;
+get_random_fail_prob(#{delete := Prob}, {delete, _, _}) -> Prob;
+get_random_fail_prob(#{search := Prob}, {search, _}) -> Prob;
+get_random_fail_prob(#{}, _Request) -> 0.0;
+get_random_fail_prob(Prob, _Request) when is_number(Prob) -> Prob.
+
 -spec try_fail(float(), float(), Error :: any()) -> ok | no_return().
-try_fail(Prob, Border, Error) when Prob < Border ->
+try_fail(Roll, Prob, Error) when Roll < Prob ->
     erlang:throw(Error);
-try_fail(_Prob, _Border, _Error) ->
+try_fail(_Roll, _Prob, _Error) ->
     ok.
 
 %% utils
