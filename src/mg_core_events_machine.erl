@@ -247,12 +247,7 @@ ref2id(Options, {tag, Tag}) ->
     #{
         add_tag => mg_core_machine_tags:tag() | undefined,
         remove => remove | undefined,
-        new_events_range => events_range(),
-        % ED-290
-        % Deprecated, should be removed after initial rollout.
-        new_timer => int_timer() | undefined | unchanged,
-        add_events => [mg_core_events:event()],
-        new_aux_state => aux_state()
+        new_events_range => events_range()
     }
     | undefined.
 
@@ -323,14 +318,11 @@ process_machine_(_, _, {call, remove}, _, _, _, State) ->
 process_machine_(Options, ID, {Subj, {Args, HRange}}, _, ReqCtx, Deadline, State) ->
     % обработка стандартных запросов
     % NOTE
-    % We won't handle `undefined` here though it's possible, yet extremely unlikely.
-    % Imagine a machine ordered to be removed failed during continuation, and then someone tries
-    % to repair it.
-    EffectiveState = maybe_apply_delayed_actions(State),
-    Machine = machine(Options, ID, EffectiveState, HRange),
-    % TODO ED-290
-    % Keeping original state intact shouldn't be needed after initial rollout?
-    process_machine_std(Options, ReqCtx, Deadline, Subj, Args, Machine, EffectiveState);
+    % We don't need "effective" state here because it differs only when machine was ordered to
+    % be removed, yet undefined state is totally unexpected here. Moreover, one would not be able
+    % to repair if such machine failed in the continuation.
+    Machine = machine(Options, ID, State, HRange),
+    process_machine_std(Options, ReqCtx, Deadline, Subj, Args, Machine, State);
 process_machine_(
     Options,
     ID,
@@ -338,7 +330,7 @@ process_machine_(
     PCtx,
     ReqCtx,
     Deadline,
-    State0 = #{delayed_actions := DelayedActions}
+    State1 = #{delayed_actions := DelayedActions}
 ) ->
     % отложенные действия (эвент синк, тэг)
     %
@@ -350,26 +342,8 @@ process_machine_(
     % надо быть аккуратнее, мест чтобы накосячить тут вагон и маленькая тележка  :-\
     %
     % действия должны обязательно произойти в конце концов (таймаута нет), либо машина должна упасть
-
-    ok = update_event_sinks(Options, ID, ReqCtx, Deadline, State0),
+    ok = update_event_sinks(Options, ID, ReqCtx, Deadline, State1),
     ok = add_tag(Options, ID, ReqCtx, Deadline, maps:get(add_tag, DelayedActions)),
-
-    % TODO ED-290
-    % Should be safe to drop after initial rollout, given there are no machines in production which
-    % became failed during continuation processing.
-    State1 =
-        case DelayedActions of
-            #{add_events := Events} ->
-                {State, ExternalEvents} = maybe_stash_events(Options, State0, Events),
-                ok = store_events(Options, ID, ExternalEvents),
-                % NOTE
-                % Doing this so these `Events` won't duplicate in state later on, in
-                % `try_apply_delayed_actions/1`, since it hijacks event stash.
-                State#{delayed_actions := DelayedActions#{add_events := []}};
-            #{} ->
-                State0
-        end,
-
     ReplyAction =
         case PCtx of
             #{state := Reply} ->
@@ -378,8 +352,8 @@ process_machine_(
                 noreply
         end,
     {FlowAction, State2} =
-        case maybe_apply_delayed_actions(State1) of
-            undefined ->
+        case apply_delayed_actions_to_state(DelayedActions, State1) of
+            remove ->
                 {remove, State1};
             StateNext ->
                 {state_to_flow_action(StateNext), StateNext}
@@ -463,17 +437,6 @@ store_events(Options, ID, Events) ->
     mg_core_events_storage:store_events(Options, ID, Events).
 
 -spec update_event_sinks(options(), id(), request_context(), deadline(), state()) -> ok.
-%% TODO ED-290
-%% Should be safe to drop this clause after initial rollout, given there are no machines in
-%% production which became failed during continuation processing.
-update_event_sinks(
-    Options,
-    ID,
-    ReqCtx,
-    Deadline,
-    #{delayed_actions := #{add_events := Events}}
-) ->
-    push_events_to_event_sinks(Options, ID, ReqCtx, Deadline, Events);
 update_event_sinks(
     Options,
     ID,
@@ -511,36 +474,7 @@ state_to_flow_action(#{timer := {Timestamp, ReqCtx, HandlingTimeout, _}}) ->
 -spec apply_delayed_actions_to_state(delayed_actions(), state()) -> state() | remove.
 apply_delayed_actions_to_state(#{remove := remove}, _) ->
     remove;
-% TODO ED-290
-% Should be safe to drop this clause after initial rollout, given there are no machines
-% in production which became failed during continuation processing.
-apply_delayed_actions_to_state(
-    DA = #{
-        add_events := NewEvents,
-        new_aux_state := NewAuxState,
-        new_events_range := NewEventsRange
-    },
-    State = #{events := Events}
-) ->
-    apply_delayed_timer_actions_to_state(
-        DA,
-        State#{
-            % NOTE
-            % Hijacking event stash stuff here, in the name of code simplicity.
-            events := Events ++ NewEvents,
-            events_range := NewEventsRange,
-            aux_state := NewAuxState
-        }
-    );
-apply_delayed_actions_to_state(DA, State) ->
-    apply_delayed_timer_actions_to_state(DA, State).
-
--spec apply_delayed_timer_actions_to_state(delayed_actions(), state()) -> state().
-apply_delayed_timer_actions_to_state(#{new_timer := unchanged}, State) ->
-    State;
-apply_delayed_timer_actions_to_state(#{new_timer := Timer}, State) ->
-    State#{timer := Timer};
-apply_delayed_timer_actions_to_state(#{}, State) ->
+apply_delayed_actions_to_state(#{}, State) ->
     State.
 
 -spec emit_action_beats(options(), mg_core:id(), request_context(), complex_action()) -> ok.
@@ -858,15 +792,6 @@ add_delayed_action(remove, undefined, DelayedActions) ->
     DelayedActions;
 add_delayed_action(remove, Remove, DelayedActions) ->
     DelayedActions#{remove => Remove};
-%% TODO ED-290
-%% Should be safe to drop after initial rollout, given there are no machines in production which
-%% became failed during continuation processing.
-add_delayed_action(new_events_range, Range, DelayedActions = #{add_events := NewEvents}) ->
-    % NOTE
-    % Preserve yet "unsinked" events in `new_events_range` so they'll get in event sinks next
-    % continuation.
-    NewEventsRange = compute_events_range(NewEvents),
-    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, NewEventsRange)};
 add_delayed_action(new_events_range, Range, DelayedActions) ->
     % NOTE
     % Preserve yet "unsinked" events in `new_events_range` so they'll get in event sinks next
@@ -966,50 +891,12 @@ delayed_actions_to_opaque(
 -spec opaque_to_delayed_actions(mg_core_storage:opaque()) -> delayed_actions().
 opaque_to_delayed_actions(null) ->
     undefined;
-% TODO ED-290
-% Should be safe to drop legacy unmarshalling after initial rollout, given there are no machines
-% in production which became failed during continuation processing.
-opaque_to_delayed_actions([1, Tag, Timer, Events, AuxState, EventsRange]) ->
-    #{
-        add_tag => mg_core_events:maybe_from_opaque(Tag, fun mg_core_events:identity/1),
-        new_timer => mg_core_events:maybe_from_opaque(Timer, fun opaque_to_delayed_timer_actions/1),
-        remove => undefined,
-        add_events => mg_core_events:opaques_to_events(Events),
-        new_aux_state => {#{}, AuxState},
-        new_events_range => mg_core_events:opaque_to_events_range(EventsRange)
-    };
-opaque_to_delayed_actions([2, Tag, Timer, Remove, Events, AuxState, EventsRange]) ->
-    DelayedActions = opaque_to_delayed_actions([1, Tag, Timer, Events, AuxState, EventsRange]),
-    DelayedActions#{
-        remove := mg_core_events:maybe_from_opaque(Remove, fun opaque_to_remove/1),
-        new_aux_state := {#{}, AuxState}
-    };
-opaque_to_delayed_actions([3, Tag, Timer, Remove, Events, AuxState, EventsRange]) ->
-    DelayedActions = opaque_to_delayed_actions([
-        2,
-        Tag,
-        Timer,
-        Remove,
-        Events,
-        AuxState,
-        EventsRange
-    ]),
-    DelayedActions#{
-        new_aux_state := mg_core_events:opaque_to_content(AuxState)
-    };
 opaque_to_delayed_actions([4, Tag, Remove, EventsRange]) ->
     #{
         add_tag => mg_core_events:maybe_from_opaque(Tag, fun mg_core_events:identity/1),
         remove => mg_core_events:maybe_from_opaque(Remove, fun opaque_to_remove/1),
         new_events_range => mg_core_events:opaque_to_events_range(EventsRange)
     }.
-
--spec opaque_to_delayed_timer_actions(mg_core_storage:opaque()) ->
-    genlib_time:ts() | undefined | unchanged.
-opaque_to_delayed_timer_actions(<<"unchanged">>) ->
-    unchanged;
-opaque_to_delayed_timer_actions(Timer) ->
-    opaque_to_int_timer(Timer).
 
 -spec remove_to_opaque(remove) -> mg_core_storage:opaque().
 remove_to_opaque(Value) ->
