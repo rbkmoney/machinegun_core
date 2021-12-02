@@ -232,10 +232,10 @@ write_remove_action(undefined) ->
     null.
 
 -spec read_maybe(T | null) -> T | undefined.
-read_maybe(V) when V /= null ->
-    V;
 read_maybe(null) ->
-    undefined.
+    undefined;
+read_maybe(V) ->
+    V.
 
 %%
 
