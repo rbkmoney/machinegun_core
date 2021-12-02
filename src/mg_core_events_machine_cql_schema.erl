@@ -28,7 +28,6 @@
     timer_handling_event_range,
     timer_handling_timeout,
     new_events_range,
-    delayed_add_events,
     delayed_add_tag,
     delayed_remove
 ]).
@@ -44,9 +43,6 @@ prepare_get_query(_Options, Query) ->
 prepare_update_query(_Options, State, StateWas, Query) ->
     write_changes(
         fun write_state/4,
-        % NOTE
-        % Order is important because we reuse timer- and aux-state-related
-        % columns for some bits of delayed actions.
         [events, events_range, aux_state, timer, delayed_actions],
         State,
         genlib:define(StateWas, #{}),
@@ -109,10 +105,7 @@ write_delayed_actions(DA = #{}, DAWas, Query) ->
         [
             new_events_range,
             add_tag,
-            new_timer,
-            remove,
-            add_events,
-            new_aux_state
+            remove
         ],
         DA,
         genlib:define(DAWas, #{}),
@@ -121,7 +114,6 @@ write_delayed_actions(DA = #{}, DAWas, Query) ->
 write_delayed_actions(undefined, _, Query) ->
     Query#{
         new_events_range => null,
-        delayed_add_events => null,
         delayed_remove => null,
         delayed_add_tag => null
     }.
@@ -130,17 +122,8 @@ write_delayed_action(new_events_range, ER, _, Query) ->
     Query#{new_events_range => write_events_range(ER)};
 write_delayed_action(add_tag, T, _, Query) ->
     Query#{delayed_add_tag => T};
-write_delayed_action(new_timer, unchanged, _, Query) ->
-    Query;
-write_delayed_action(new_timer, T, _, Query) ->
-    write_timer(T, Query);
 write_delayed_action(remove, R, _, Query) ->
-    Query#{delayed_remove => write_remove_action(R)};
-write_delayed_action(add_events, Es, _, Query) ->
-    Query#{delayed_add_events => write_events(Es)};
-write_delayed_action(new_aux_state, AS, _, Query) ->
-    % TODO ED-290
-    write_aux_state(AS, Query).
+    Query#{delayed_remove => write_remove_action(R)}.
 
 -spec write_timer(mg_core_events_machine:timer_state() | undefined, query_update()) ->
     query_update().
@@ -157,14 +140,12 @@ write_timer({TS, _ReqCtx, TO, ER}, Query) ->
 
 -spec read_machine_state(options(), record()) -> machine_state().
 read_machine_state(_Options, Record) ->
-    State0 = #{
+    #{
         events => read_machine_events_stash(Record),
         events_range => read_machine_events_range(Record),
         aux_state => read_aux_state(Record),
-        timer => read_timer(Record)
-    },
-    State0#{
-        delayed_actions => read_delayed_actions(Record, State0)
+        timer => read_timer(Record),
+        delayed_actions => read_delayed_actions(Record)
     }.
 
 -spec read_machine_events_stash(record()) -> [mg_core_events:event()].
@@ -203,26 +184,20 @@ read_timer(#{
         read_events_range(ER)
     }.
 
--spec read_delayed_actions(record(), machine_state()) -> mg_core_events_machine:delayed_actions().
-read_delayed_actions(#{new_events_range := null}, _) ->
+-spec read_delayed_actions(record()) -> mg_core_events_machine:delayed_actions().
+read_delayed_actions(#{new_events_range := null}) ->
     undefined;
 read_delayed_actions(
     #{
         new_events_range := ER,
-        delayed_add_events := AE,
         delayed_add_tag := T,
         delayed_remove := R
-    },
-    State
+    }
 ) ->
     #{
+        new_events_range => read_events_range(ER),
         add_tag => read_maybe(T),
-        new_timer => maps:get(timer, State),
-        remove => read_remove_action(R),
-        add_events => read_events(AE),
-        % TODO ED-290
-        new_aux_state => maps:get(aux_state, State),
-        new_events_range => read_events_range(ER)
+        remove => read_remove_action(R)
     }.
 
 %%
@@ -282,8 +257,6 @@ bootstrap(_Options, NS, Client) ->
                 "timer_handling_event_range TUPLE<INT, INT>,"
                 "timer_handling_timeout INT,"
                 "new_events_range TUPLE<INT, INT>,"
-                % TODO ED-290
-                "delayed_add_events BLOB,"
                 "delayed_add_tag TEXT,"
                 "delayed_remove BOOLEAN",
                 ")"
