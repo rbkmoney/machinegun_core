@@ -78,8 +78,7 @@ end_per_suite(C) ->
 
 -spec init_per_group(group_name(), config()) -> config().
 init_per_group(storage_memory, C) ->
-    {ok, StoragePid} = mg_core_storage_memory:start_link(#{name => ?MODULE}),
-    true = erlang:unlink(StoragePid),
+    {ok, StoragePid} = mg_core_storage_memory:start(#{name => ?MODULE}),
     KVSOptions = {mg_core_storage_memory, #{existing_storage_name => ?MODULE}},
     MachineStorage = {mg_core_machine_storage_kvs, #{kvs => KVSOptions}},
     EventsStorage = {mg_core_events_storage_kvs, #{kvs => KVSOptions}},
