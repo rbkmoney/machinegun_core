@@ -57,7 +57,7 @@
 -define(DEFAULT_WRITE_CONSISTENCY, quorum).
 
 % -define(CQL_DATE_EPOCH, 16#7FFFFFFF).
--define(NS_PER_SEC, 1000000000).
+-define(NS_PER_SEC, 1_000_000_000).
 -define(NS_PER_DAY, (24 * 3600 * ?NS_PER_SEC)).
 
 %%
