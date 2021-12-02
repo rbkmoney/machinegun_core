@@ -49,7 +49,7 @@ get(Options, _NS, ID) ->
     end.
 
 -spec update(options(), ns(), id(), machine(), machine() | undefined, context()) -> context().
-update(Options, _NS, ID, Machine, _MachineWas, Context) ->
+update(Options, _NS, ID, Machine, _MachinePrev, Context) ->
     mg_core_storage:put(
         kvs_options(Options),
         ID,

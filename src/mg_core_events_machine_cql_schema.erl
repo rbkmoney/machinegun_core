@@ -38,25 +38,25 @@
 prepare_get_query(_Options, Query) ->
     ?COLUMNS ++ Query.
 
--spec prepare_update_query(options(), machine_state(), _Was :: machine_state(), query_update()) ->
+-spec prepare_update_query(options(), machine_state(), machine_state() | undefined, query_update()) ->
     query_update().
-prepare_update_query(_Options, State, StateWas, Query) ->
+prepare_update_query(_Options, State, StatePrev, Query) ->
     write_changes(
         fun write_state/4,
         [events, events_range, aux_state, timer, delayed_actions],
         State,
-        genlib:define(StateWas, #{}),
+        genlib:define(StatePrev, #{}),
         Query
     ).
 
-write_changes(Fun, Things, V, Was, Query) ->
+write_changes(Fun, Things, V, VPrev, Query) ->
     lists:foldl(
         fun(Thing, QAcc) ->
             write_changed(
                 Fun,
                 Thing,
                 maps:get(Thing, V, undefined),
-                maps:get(Thing, Was, undefined),
+                maps:get(Thing, VPrev, undefined),
                 QAcc
             )
         end,
@@ -64,10 +64,10 @@ write_changes(Fun, Things, V, Was, Query) ->
         Things
     ).
 
-write_changed(_, _, V1, V2, Query) when V1 =:= V2 ->
+write_changed(_, _, V, VPrev, Query) when V =:= VPrev ->
     Query;
-write_changed(Fun, Thing, V, Was, Query) ->
-    Fun(Thing, V, Was, Query).
+write_changed(Fun, Thing, V, VPrev, Query) ->
+    Fun(Thing, V, VPrev, Query).
 
 write_state(events, [], _, Query) ->
     Query;
@@ -77,8 +77,8 @@ write_state(events_range, ER, _, Query) ->
     Query#{events_range => write_events_range(ER)};
 write_state(aux_state, AS, _, Query) ->
     write_aux_state(AS, Query);
-write_state(delayed_actions, DA, DAWas, Query) ->
-    write_delayed_actions(DA, DAWas, Query);
+write_state(delayed_actions, DA, DAPrev, Query) ->
+    write_delayed_actions(DA, DAPrev, Query);
 write_state(timer, T, _, Query) ->
     write_timer(T, Query).
 
@@ -96,10 +96,10 @@ write_aux_state_metadata(#{format_version := FV}, Query) ->
 write_aux_state_metadata(#{}, Query) ->
     Query.
 
--spec write_delayed_actions(DA, Was, query_update()) -> query_update() when
+-spec write_delayed_actions(DA, DAPrev, query_update()) -> query_update() when
     DA :: mg_core_events_machine:delayed_actions(),
-    Was :: mg_core_events_machine:delayed_actions().
-write_delayed_actions(DA = #{}, DAWas, Query) ->
+    DAPrev :: mg_core_events_machine:delayed_actions().
+write_delayed_actions(DA = #{}, DAPrev, Query) ->
     write_changes(
         fun write_delayed_action/4,
         [
@@ -108,7 +108,7 @@ write_delayed_actions(DA = #{}, DAWas, Query) ->
             remove
         ],
         DA,
-        genlib:define(DAWas, #{}),
+        genlib:define(DAPrev, #{}),
         Query
     );
 write_delayed_actions(undefined, _, Query) ->

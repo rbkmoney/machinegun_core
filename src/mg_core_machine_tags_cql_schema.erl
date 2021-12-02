@@ -24,7 +24,7 @@
 prepare_get_query(_Options, Query) ->
     [?COLUMN] ++ Query.
 
--spec prepare_update_query(options(), machine_state(), _Was :: machine_state(), query_update()) ->
+-spec prepare_update_query(options(), machine_state(), machine_state() | undefined, query_update()) ->
     query_update().
 prepare_update_query(_Options, State, State, Query) ->
     Query;

@@ -101,9 +101,9 @@ get(Options, NS, ID) ->
     mg_core_utils:apply_mod_opts(Options, get, [NS, ID]).
 
 -spec update(options(), ns(), id(), machine(), machine() | undefined, context()) -> context().
-update(Options, NS, ID, Machine, MachineWas, Context) ->
+update(Options, NS, ID, Machine, MachinePrev, Context) ->
     _ = validate_machine_id(ID),
-    mg_core_utils:apply_mod_opts(Options, update, [NS, ID, Machine, MachineWas, Context]).
+    mg_core_utils:apply_mod_opts(Options, update, [NS, ID, Machine, MachinePrev, Context]).
 
 -spec remove(options(), ns(), id(), context()) -> ok.
 remove(Options, NS, ID, Context) ->

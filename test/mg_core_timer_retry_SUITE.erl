@@ -236,7 +236,7 @@ prepare_get_query(_, Query) ->
 
 -spec prepare_update_query(_, state(), state() | undefined, query_update()) ->
     query_update().
-prepare_update_query(_, {Mode, Counter}, _Was, Query) ->
+prepare_update_query(_, {Mode, Counter}, _Prev, Query) ->
     Query#{
         test_mode => mode_to_binary(Mode),
         test_counter => Counter

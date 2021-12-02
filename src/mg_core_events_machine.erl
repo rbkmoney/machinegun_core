@@ -580,37 +580,40 @@ process_repair(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Mach
     state()
 ) ->
     state().
-handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, Deadline, StateWas) ->
-    {State, Events} = handle_state_change(
+handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, Deadline, State) ->
+    {StateNext, Events} = handle_state_change(
         Options,
         StateChange,
-        handle_complex_action(ComplexAction, ReqCtx, StateWas)
+        handle_complex_action(ComplexAction, ReqCtx, State)
     ),
     ok = retry_store_events(Options, ID, Deadline, Events),
     ok = emit_action_beats(Options, ID, ReqCtx, ComplexAction),
-    State.
+    StateNext.
 
 -spec handle_state_change(options(), state_change(), state()) ->
     {state(), [event()]}.
 handle_state_change(
     Options,
     {AuxState, EventsBodies},
-    StateWas = #{events_range := EventsRangeWas}
+    State = #{events_range := EventsRange}
 ) ->
-    {Events, EventsRange} = mg_core_events:generate_events_with_range(EventsBodies, EventsRangeWas),
+    {Events, EventsRangeNext} = mg_core_events:generate_events_with_range(
+        EventsBodies,
+        EventsRange
+    ),
     DelayedActions = #{
         % NOTE
         % This is a range of events which are not yet pushed to event sinks
-        new_events_range => diff_event_ranges(EventsRange, EventsRangeWas)
+        new_events_range => diff_event_ranges(EventsRangeNext, EventsRange)
     },
-    State = add_delayed_actions(
+    StateNext = add_delayed_actions(
         DelayedActions,
-        StateWas#{
-            events_range := EventsRange,
+        State#{
+            events_range := EventsRangeNext,
             aux_state := AuxState
         }
     ),
-    maybe_stash_events(Options, State, Events).
+    maybe_stash_events(Options, StateNext, Events).
 
 -spec diff_event_ranges(events_range(), events_range()) -> events_range().
 diff_event_ranges(LHS, undefined) ->
@@ -621,14 +624,14 @@ diff_event_ranges(LHS, RHS) ->
 
 -spec handle_complex_action(complex_action(), request_context(), state()) ->
     state().
-handle_complex_action(ComplexAction, ReqCtx, StateWas) ->
+handle_complex_action(ComplexAction, ReqCtx, State) ->
     TimerAction = maps:get(timer, ComplexAction, undefined),
-    State = handle_timer_action(TimerAction, ReqCtx, StateWas),
+    StateNext = handle_timer_action(TimerAction, ReqCtx, State),
     DelayedActions = #{
         add_tag => maps:get(tag, ComplexAction, undefined),
         remove => maps:get(remove, ComplexAction, undefined)
     },
-    add_delayed_actions(DelayedActions, State).
+    add_delayed_actions(DelayedActions, StateNext).
 
 -spec handle_timer_action(undefined | timer_action(), request_context(), state()) ->
     state().
@@ -812,8 +815,8 @@ add_delayed_action(new_events_range, Range, DelayedActions) ->
     % NOTE
     % Preserve yet "unsinked" events in `new_events_range` so they'll get in event sinks next
     % continuation.
-    EventsRangeWas = maps:get(new_events_range, DelayedActions, mg_core_dirange:empty()),
-    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, EventsRangeWas)}.
+    EventsRangePrev = maps:get(new_events_range, DelayedActions, mg_core_dirange:empty()),
+    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, EventsRangePrev)}.
 
 -spec compute_events_range([mg_core_events:event()]) -> mg_core_events:events_range().
 compute_events_range([]) ->

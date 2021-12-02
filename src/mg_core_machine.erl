@@ -843,20 +843,20 @@ wrap_reply_action(Wrapper, {reply, R}) ->
 transit_state(
     _ReqCtx,
     _Deadline,
-    StorageMachineNew,
-    State = #{storage_machine := StorageMachineWas}
-) when StorageMachineNew =:= StorageMachineWas ->
+    StorageMachine,
+    State = #{storage_machine := StorageMachinePrev}
+) when StorageMachine =:= StorageMachinePrev ->
     State;
-transit_state(ReqCtx, Deadline, StorageMachineNew = #{status := Status}, State) ->
+transit_state(ReqCtx, Deadline, StorageMachine = #{status := Status}, State) ->
     #{
         namespace := NS,
         id := ID,
         options := Options,
-        storage_machine := StorageMachineWas,
-        storage_context := StorageContext
+        storage_machine := StorageMachinePrev,
+        storage_context := StorageContextPrev
     } = State,
     _ =
-        case StorageMachineWas of
+        case StorageMachinePrev of
             #{status := Status} -> ok;
             _Different -> handle_status_transition(Status, State)
         end,
@@ -865,16 +865,16 @@ transit_state(ReqCtx, Deadline, StorageMachineNew = #{status := Status}, State) 
             storage_options(Options),
             NS,
             ID,
-            StorageMachineNew,
-            StorageMachineWas,
-            StorageContext
+            StorageMachine,
+            StorageMachinePrev,
+            StorageContextPrev
         )
     end,
     RS = retry_strategy(storage, Options, Deadline),
-    StorageContextNew = do_with_retry(Options, ID, F, RS, ReqCtx, transit),
+    StorageContext = do_with_retry(Options, ID, F, RS, ReqCtx, transit),
     State#{
-        storage_machine := StorageMachineNew,
-        storage_context := StorageContextNew
+        storage_machine := StorageMachine,
+        storage_context := StorageContext
     }.
 
 -spec handle_status_transition(machine_status(), state()) -> _.

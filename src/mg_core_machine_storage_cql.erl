@@ -154,16 +154,16 @@ mk_get_query(Options, NS, ID) ->
     ).
 
 -spec update(options(), ns(), id(), machine(), machine() | undefined, context()) -> context().
-update(Options, NS, ID, Machine, MachineWas, _Context) ->
-    Query = mk_update_query(Options, NS, ID, Machine, genlib:define(MachineWas, #{})),
+update(Options, NS, ID, Machine, MachinePrev, _Context) ->
+    Query = mk_update_query(Options, NS, ID, Machine, genlib:define(MachinePrev, #{})),
     mg_core_storage_cql:execute_query(Options, Query, fun(void) -> [] end).
 
 -spec mk_update_query(options(), ns(), id(), machine(), machine()) -> #cql_query{}.
-mk_update_query(Options, NS, ID, Machine, MachineWas) ->
+mk_update_query(Options, NS, ID, Machine, MachinePrev) ->
     % TODO
     % This is harder to memoize: set of affected columns is non-constant. This
     % should be taken into account.
-    Query = write_machine(Options, Machine, MachineWas, #{}),
+    Query = write_machine(Options, Machine, MachinePrev, #{}),
     mg_core_storage_cql:mk_query(
         Options,
         update,
@@ -303,18 +303,18 @@ read_status(#{status := ?STATUS_RETRYING, target := TS, reqctx := ReqCtx, retry 
 %%
 
 -spec write_machine(options(), machine(), machine(), query_update()) -> query_update().
-write_machine(Options, #{status := Status, state := State}, MachineWas, Query) ->
+write_machine(Options, #{status := Status, state := State}, MachinePrev, Query) ->
     % TODO
     % We need few proptests here to verify that what we write and what we read
     % back are same thing. Attempt to optimize out unwanted column updates made
     % this logic a bit convoluted.
-    StateWas = maps:get(state, MachineWas, undefined),
-    StatusWas = maps:get(status, MachineWas, undefined),
-    Query1 = clean_machine_status(StatusWas, Query),
-    Query2 = write_machine_status(Status, StatusWas, Query1),
-    write_machine_state(Options, State, StateWas, Query2).
+    StatePrev = maps:get(state, MachinePrev, undefined),
+    StatusPrev = maps:get(status, MachinePrev, undefined),
+    Query1 = clean_machine_status(StatusPrev, Query),
+    Query2 = write_machine_status(Status, StatusPrev, Query1),
+    write_machine_state(Options, State, StatePrev, Query2).
 
--spec clean_machine_status(_StatusWas :: machine_status(), query_update()) -> query_update().
+-spec clean_machine_status(_StatusPrev :: machine_status(), query_update()) -> query_update().
 clean_machine_status({error, _, _}, Query) ->
     Query#{
         error_reason => null,
@@ -326,39 +326,40 @@ clean_machine_status(_, Query) ->
 
 -spec write_machine_state(options(), machine_state(), machine_state() | undefined, query_update()) ->
     query_update().
-write_machine_state(_Options, State, State, Query) ->
+write_machine_state(_Options, State, StatePrev, Query) when State =:= StatePrev ->
     Query;
-write_machine_state(Options, State, StateWas, Query) ->
-    mg_core_utils:apply_mod_opts(get_schema(Options), prepare_update_query, [State, StateWas, Query]).
+write_machine_state(Options, State, StatePrev, Query) ->
+    Schema = get_schema(Options),
+    mg_core_utils:apply_mod_opts(Schema, prepare_update_query, [State, StatePrev, Query]).
 
--spec write_machine_status(machine_status(), _Was :: machine_status(), query_update()) ->
+-spec write_machine_status(machine_status(), _Prev :: machine_status(), query_update()) ->
     query_update().
 write_machine_status(Status, Status, Query) ->
     Query;
-write_machine_status(Status = sleeping, StatusWas, Query) ->
-    Query1 = write_changes([class], Status, StatusWas, Query),
+write_machine_status(Status = sleeping, StatusPrev, Query) ->
+    Query1 = write_changes([class], Status, StatusPrev, Query),
     Query1#{
         target => null
     };
-write_machine_status(Status = {waiting, _, _, TO}, StatusWas, Query) ->
-    Query1 = write_changes([class, target, reqctx], Status, StatusWas, Query),
+write_machine_status(Status = {waiting, _, _, TO}, StatusPrev, Query) ->
+    Query1 = write_changes([class, target, reqctx], Status, StatusPrev, Query),
     Query1#{
         handling_timeout => TO
     };
-write_machine_status(Status = {processing, _}, StatusWas, Query) ->
-    Query1 = write_changes([class, reqctx], Status, StatusWas, Query),
+write_machine_status(Status = {processing, _}, StatusPrev, Query) ->
+    Query1 = write_changes([class, reqctx], Status, StatusPrev, Query),
     Query1#{
         target => null
     };
-write_machine_status(Status = {error, _, OS}, StatusWas, Query) ->
-    Query1 = write_changes([class, error_reason], Status, StatusWas, Query),
+write_machine_status(Status = {error, _, OS}, StatusPrev, Query) ->
+    Query1 = write_changes([class, error_reason], Status, StatusPrev, Query),
     Query2 = write_defined(original_target, get_status_detail(target, OS), Query1),
     Query2#{
         target => null,
         original_status => write_status_class(get_status_detail(class, OS))
     };
-write_machine_status(Status = {retrying, _, Start, Attempt, _}, StatusWas, Query) ->
-    Query1 = write_changes([class, target, reqctx], Status, StatusWas, Query),
+write_machine_status(Status = {retrying, _, Start, Attempt, _}, StatusPrev, Query) ->
+    Query1 = write_changes([class, target, reqctx], Status, StatusPrev, Query),
     Query1#{
         retry => [mg_core_storage_cql:write_timestamp_s(Start), Attempt]
     }.
@@ -370,13 +371,13 @@ write_defined(Detail, V, Query) ->
     write_status_detail(Detail, V, Query).
 
 -spec write_changes([atom()], machine_status(), machine_status(), query_update()) -> query_update().
-write_changes(Details, Status, StatusWas, Query) ->
+write_changes(Details, Status, StatusPrev, Query) ->
     lists:foldl(
         fun(Detail, QAcc) ->
             write_changed(
                 Detail,
                 get_status_detail(Detail, Status),
-                get_status_detail(Detail, StatusWas),
+                get_status_detail(Detail, StatusPrev),
                 QAcc
             )
         end,

@@ -257,7 +257,7 @@ prepare_get_query(_, Query) ->
 
 -spec prepare_update_query(_, machine_state(), machine_state() | undefined, query_update()) ->
     query_update().
-prepare_update_query(_, {TestKey, TestValue}, _Was, Query) ->
+prepare_update_query(_, {TestKey, TestValue}, _Prev, Query) ->
     Query#{
         test_key => TestKey,
         test_counter => TestValue
