@@ -32,7 +32,7 @@
 
 -define(COLUMNS, [
     machine_id,
-    page
+    page_offset
     | ?EVENT_COLUMNS
 ]).
 
@@ -129,7 +129,7 @@ mk_get_query(Options, NS, MachineID, Range) ->
             "FROM",
             mk_table_name(NS),
             "WHERE machine_id = :machine_id",
-            "AND page = :page",
+            "AND page_offset = :page_offset",
             "AND event_id >= :event_from",
             "AND event_id <= :event_to",
             "ORDER BY event_id",
@@ -137,7 +137,7 @@ mk_get_query(Options, NS, MachineID, Range) ->
         ]),
         [
             {machine_id, MachineID},
-            {page, compute_event_page(From)},
+            {page_offset, compute_event_page_offset(From)},
             {event_from, From},
             {event_to, To}
         ]
@@ -167,7 +167,7 @@ store_events(Options, NS, MachineID, Events) ->
 write_event(#{id := ID, created_at := TS, body := Body}, Values) ->
     write_event_body(Body, [
         {event_id, ID},
-        {page, compute_event_page(ID)},
+        {page_offset, compute_event_page_offset(ID)},
         {created_at, mg_core_storage_cql:write_timestamp_ns(TS)}
         | Values
     ]).
@@ -183,13 +183,13 @@ write_event_body_metadata(#{format_version := FV}, Values) ->
 write_event_body_metadata(#{}, Values) ->
     Values.
 
-compute_event_page(EventID) ->
+compute_event_page_offset(EventID) ->
     % What page this event belongs to?
     EventID - EventID rem ?EVENTS_PER_PAGE.
 
 compute_event_page_cutoff(Range) ->
     % Where does "current" page of the event range ends?
-    compute_event_page(mg_core_dirange:from(Range)) +
+    compute_event_page_offset(mg_core_dirange:from(Range)) +
         case mg_core_dirange:direction(Range) of
             +1 -> ?EVENTS_PER_PAGE - 1;
             -1 -> 0
@@ -207,12 +207,12 @@ bootstrap(Options, NS) ->
             % NOTE
             % Keep in sync with `?COLUMNS`.
             "machine_id TEXT,"
-            "page INT,"
+            "page_offset INT,"
             "event_id INT,"
             "created_at TUPLE<DATE, TIME>,"
             "body BLOB,"
             "body_format_vsn SMALLINT,"
-            "PRIMARY KEY ((machine_id, page), event_id)"
+            "PRIMARY KEY ((machine_id, page_offset), event_id)"
             ")"
         ])
     ).
