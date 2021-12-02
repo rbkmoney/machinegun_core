@@ -219,7 +219,7 @@ write_events_range(ER) ->
     {From, To} = mg_core_dirange:bounds(ER),
     [From, To].
 
--spec read_remove_action(boolean() | null) -> remove | undefined.
+-spec read_remove_action(true | null) -> remove | undefined.
 read_remove_action(true) ->
     remove;
 read_remove_action(null) ->
