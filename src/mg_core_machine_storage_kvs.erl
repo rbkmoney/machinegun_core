@@ -33,6 +33,12 @@
 -callback opaque_to_state(mg_core_storage:opaque()) -> machine_state().
 -callback state_to_opaque(machine_state()) -> mg_core_storage:opaque().
 
+-define(STATUS_SLEEPING, 1).
+-define(STATUS_WAITING, 2).
+-define(STATUS_PROCESSING, 3).
+-define(STATUS_FAILED, 4).
+-define(STATUS_RETRYING, 5).
+
 %%
 
 -spec child_spec(options(), _ChildID) -> supervisor:child_spec() | undefined.
@@ -92,40 +98,40 @@ machine_status_to_opaque(Status) ->
     Opaque =
         case Status of
             sleeping ->
-                1;
+                ?STATUS_SLEEPING;
             {waiting, TS, ReqCtx, HdlTo} ->
-                [2, TS, ReqCtx, HdlTo];
+                [?STATUS_WAITING, TS, ReqCtx, HdlTo];
             {processing, ReqCtx} ->
-                [3, ReqCtx];
+                [?STATUS_PROCESSING, ReqCtx];
             % TODO подумать как упаковывать reason
             {error, Reason, OldStatus} ->
-                [4, erlang:term_to_binary(Reason), machine_status_to_opaque(OldStatus)];
+                [?STATUS_FAILED, erlang:term_to_binary(Reason), machine_status_to_opaque(OldStatus)];
             {retrying, TS, StartTS, Attempt, ReqCtx} ->
-                [5, TS, StartTS, Attempt, ReqCtx]
+                [?STATUS_RETRYING, TS, StartTS, Attempt, ReqCtx]
         end,
     Opaque.
 
 -spec opaque_to_machine_status(mg_core_storage:opaque()) -> machine_status().
 opaque_to_machine_status(Opaque) ->
     case Opaque of
-        1 ->
+        ?STATUS_SLEEPING ->
             sleeping;
         % совместимость со старой версией
-        [2, TS] ->
+        [?STATUS_WAITING, TS] ->
             {waiting, TS, null, 30000};
-        [2, TS, ReqCtx, HdlTo] ->
+        [?STATUS_WAITING, TS, ReqCtx, HdlTo] ->
             {waiting, TS, ReqCtx, HdlTo};
         % совместимость со старой версией
-        3 ->
+        ?STATUS_PROCESSING ->
             {processing, null};
-        [3, ReqCtx] ->
+        [?STATUS_PROCESSING, ReqCtx] ->
             {processing, ReqCtx};
-        [4, Reason, OldStatus] ->
+        [?STATUS_FAILED, Reason, OldStatus] ->
             {error, erlang:binary_to_term(Reason), opaque_to_machine_status(OldStatus)};
         % устаревшее
-        [4, Reason] ->
+        [?STATUS_FAILED, Reason] ->
             {error, erlang:binary_to_term(Reason), sleeping};
-        [5, TS, StartTS, Attempt, ReqCtx] ->
+        [?STATUS_RETRYING, TS, StartTS, Attempt, ReqCtx] ->
             {retrying, TS, StartTS, Attempt, ReqCtx}
     end.
 
@@ -154,15 +160,15 @@ storage_search_query(Query, Limit) ->
 -spec storage_search_query(search_status_query() | search_target_query()) ->
     mg_core_storage:index_query().
 storage_search_query(sleeping) ->
-    {?STATUS_IDX, 1};
+    {?STATUS_IDX, ?STATUS_SLEEPING};
 storage_search_query(waiting) ->
-    {?STATUS_IDX, 2};
+    {?STATUS_IDX, ?STATUS_WAITING};
 storage_search_query(processing) ->
-    {?STATUS_IDX, 3};
+    {?STATUS_IDX, ?STATUS_PROCESSING};
 storage_search_query(failed) ->
-    {?STATUS_IDX, 4};
+    {?STATUS_IDX, ?STATUS_FAILED};
 storage_search_query(retrying) ->
-    {?STATUS_IDX, 5};
+    {?STATUS_IDX, ?STATUS_RETRYING};
 storage_search_query({waiting, FromTs, ToTs}) ->
     {?WAITING_IDX, {FromTs, ToTs}};
 storage_search_query({retrying, FromTs, ToTs}) ->
@@ -176,11 +182,11 @@ storage_machine_to_indexes(#{status := Status}) ->
 status_index(Status) ->
     StatusInt =
         case Status of
-            sleeping -> 1;
-            {waiting, _, _, _} -> 2;
-            {processing, _} -> 3;
-            {error, _, _} -> 4;
-            {retrying, _, _, _, _} -> 5
+            sleeping -> ?STATUS_SLEEPING;
+            {waiting, _, _, _} -> ?STATUS_WAITING;
+            {processing, _} -> ?STATUS_PROCESSING;
+            {error, _, _} -> ?STATUS_FAILED;
+            {retrying, _, _, _, _} -> ?STATUS_RETRYING
         end,
     [{?STATUS_IDX, StatusInt}].
 
