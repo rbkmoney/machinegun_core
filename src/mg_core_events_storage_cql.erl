@@ -184,7 +184,7 @@ write_event_body_metadata(#{}, Values) ->
     Values.
 
 compute_event_page_offset(EventID) ->
-    % What page this event belongs to?
+    % What is offset of the page this event belongs to?
     EventID - EventID rem ?EVENTS_PER_PAGE.
 
 compute_event_page_cutoff(Range) ->
