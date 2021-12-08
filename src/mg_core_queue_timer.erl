@@ -79,7 +79,7 @@ build_task(ID, Timestamp) ->
 search_tasks(Options = #{timer_queue := TimerQueue}, Limit, State = #state{}) ->
     CurrentTs = mg_core_queue_task:current_time(),
     Lookahead = maps:get(lookahead, Options, 0),
-    Query = {TimerQueue, 1, CurrentTs + Lookahead},
+    Query = {TimerQueue, 0, CurrentTs + Lookahead},
     {Timers, Continuation} = mg_core_machine:search(machine_options(Options), Query, Limit),
     {Tasks, LastTs} = lists:mapfoldl(
         fun({Ts, ID}, _LastWas) -> {build_task(ID, Ts), Ts} end,

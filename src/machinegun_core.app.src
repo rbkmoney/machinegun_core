@@ -14,7 +14,7 @@
 %%% limitations under the License.
 %%%
 
-{application, machinegun_core , [
+{application, machinegun_core, [
     {description, "Machinegun FSM processor"},
     {vsn, "1"},
     {registered, []},
@@ -26,6 +26,7 @@
         consuela,
         riakc,
         pooler,
+        cqerl,
         brod,
         msgpack
     ]},

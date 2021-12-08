@@ -22,6 +22,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 
 %% internal API
+-export([start/1]).
 -export([start_link/1]).
 
 %% mg_core_storage callbacks
@@ -39,6 +40,10 @@
 -spec start_link(options()) -> mg_core_utils:gen_start_ret().
 start_link(Options) ->
     gen_server:start_link(reg_name(get_name(Options)), ?MODULE, Options, []).
+
+-spec start(options()) -> mg_core_utils:gen_start_ret().
+start(Options) ->
+    gen_server:start(reg_name(get_name(Options)), ?MODULE, Options, []).
 
 %%
 %% mg_core_storage callbacks

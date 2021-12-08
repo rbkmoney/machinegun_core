@@ -19,6 +19,7 @@
 %% API
 -export_type([options/0]).
 -export_type([tag/0]).
+-export_type([state/0]).
 -export([child_spec/2]).
 -export([add/5]).
 -export([replace/5]).
@@ -27,6 +28,11 @@
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
 -export([process_machine/7]).
+
+%% mg_core_machine_storage_kvs
+-behaviour(mg_core_machine_storage_kvs).
+-export([state_to_opaque/1]).
+-export([opaque_to_state/1]).
 
 -type options() :: #{
     namespace => mg_core:ns(),
@@ -73,7 +79,7 @@ replace(Options, Tag, ID, ReqCtx, Deadline) ->
 -spec resolve(options(), tag()) -> mg_core:id() | undefined | no_return().
 resolve(Options, Tag) ->
     try
-        opaque_to_state(mg_core_machine:get(machine_options(Options), Tag))
+        mg_core_machine:get(machine_options(Options), Tag)
     catch
         throw:{logic, machine_not_found} ->
             undefined
@@ -94,20 +100,20 @@ resolve(Options, Tag) ->
     mg_core_machine:machine_state()
 ) -> mg_core_machine:processor_result().
 process_machine(_, _, {init, undefined}, _, _, _, _) ->
-    {{reply, ok}, sleep, state_to_opaque(undefined)};
+    {{reply, ok}, sleep, undefined};
 process_machine(_, _, {repair, undefined}, _, _, _, State) ->
     {{reply, ok}, sleep, State};
-process_machine(_, _, {call, {add, ID}}, _, _, _, PackedState) ->
-    case opaque_to_state(PackedState) of
+process_machine(_, _, {call, {add, ID}}, _, _, _, State) ->
+    case State of
         undefined ->
-            {{reply, ok}, sleep, state_to_opaque(ID)};
+            {{reply, ok}, sleep, ID};
         ID ->
-            {{reply, ok}, sleep, PackedState};
+            {{reply, ok}, sleep, State};
         OtherID ->
-            {{reply, {already_exists, OtherID}}, sleep, PackedState}
+            {{reply, {already_exists, OtherID}}, sleep, State}
     end;
 process_machine(_, _, {call, {replace, ID}}, _, _, _, _) ->
-    {{reply, ok}, sleep, state_to_opaque(ID)}.
+    {{reply, ok}, sleep, ID}.
 
 %%
 %% local

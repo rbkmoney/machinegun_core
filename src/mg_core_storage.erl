@@ -20,9 +20,6 @@
 %%% но по факту он копирует интерфейс риака.
 %%% (Хотя положить на него можно и другие базы.)
 %%%
-%%% TODO:
-%%%  - сделать работу с пачками через функтор и контекст
-%%%
 -module(mg_core_storage).
 -include_lib("machinegun_core/include/pulse.hrl").
 
@@ -68,9 +65,6 @@
 
 -export([opaque_to_binary/1]).
 -export([binary_to_opaque/1]).
-
--define(KEY_SIZE_LOWER_BOUND, 1).
--define(KEY_SIZE_UPPER_BOUND, 1024).
 
 %%
 %% API
@@ -166,12 +160,10 @@ child_spec(Options, ChildID) ->
 
 -spec put(options(), key(), context() | undefined, value(), [index_update()]) -> context().
 put(Options, Key, Context, Value, Indexes) ->
-    _ = validate_key(Key),
     do_request(Options, {put, Key, Context, Value, Indexes}).
 
 -spec get(options(), key()) -> {context(), value()} | undefined.
 get(Options, Key) ->
-    _ = validate_key(Key),
     do_request(Options, {get, Key}).
 
 -spec search(options(), index_query()) -> search_result().
@@ -180,7 +172,6 @@ search(Options, Query) ->
 
 -spec delete(options(), key(), context()) -> ok.
 delete(Options, Key, Context) ->
-    _ = validate_key(Key),
     do_request(Options, {delete, Key, Context}).
 
 -spec new_batch() -> batch().
@@ -188,14 +179,11 @@ new_batch() ->
     [].
 
 -spec add_batch_request(request(), batch()) -> batch().
-add_batch_request(Request = {get, Key}, Batch) ->
-    _ = validate_key(Key),
+add_batch_request(Request = {get, _Key}, Batch) ->
     [Request | Batch];
-add_batch_request(Request = {put, Key, _Context, _Value, _Indices}, Batch) ->
-    _ = validate_key(Key),
+add_batch_request(Request = {put, _Key, _Context, _Value, _Indices}, Batch) ->
     [Request | Batch];
-add_batch_request(Request = {delete, Key, _Context}, Batch) ->
-    _ = validate_key(Key),
+add_batch_request(Request = {delete, _Key, _Context}, Batch) ->
     [Request | Batch];
 add_batch_request(Request = {search, _}, Batch) ->
     [Request | Batch].
@@ -232,14 +220,6 @@ do_request(Options, Request) ->
     Duration = FinishTimestamp - StartTimestamp,
     ok = emit_beat_finish(Request, StorageOptions, Duration),
     Result.
-
--spec validate_key(key()) -> _ | no_return().
-validate_key(Key) when byte_size(Key) < ?KEY_SIZE_LOWER_BOUND ->
-    throw({logic, {invalid_key, {too_small, Key}}});
-validate_key(Key) when byte_size(Key) > ?KEY_SIZE_UPPER_BOUND ->
-    throw({logic, {invalid_key, {too_big, Key}}});
-validate_key(_Key) ->
-    ok.
 
 %%
 %% Internal API

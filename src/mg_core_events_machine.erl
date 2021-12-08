@@ -30,6 +30,10 @@
 -export_type([storage_options/0]).
 -export_type([ref/0]).
 -export_type([machine/0]).
+-export_type([state/0]).
+-export_type([aux_state/0]).
+-export_type([timer_state/0]).
+-export_type([delayed_actions/0]).
 -export_type([tag_action/0]).
 -export_type([timer_action/0]).
 -export_type([complex_action/0]).
@@ -55,6 +59,14 @@
 %% mg_core_machine handler
 -behaviour(mg_core_machine).
 -export([processor_child_spec/1, process_machine/7]).
+
+%% mg_core_machine_storage_kvs
+-behaviour(mg_core_machine_storage_kvs).
+-export([state_to_opaque/1]).
+-export([opaque_to_state/1]).
+
+%% Utilities
+-export([events_storage_options/1]).
 
 -define(DEFAULT_RETRY_POLICY, {exponential, infinity, 2, 10, 60 * 1000}).
 
@@ -97,11 +109,11 @@
     history => [mg_core_events:event()],
     history_range => mg_core_events:history_range(),
     aux_state => aux_state(),
-    timer => int_timer()
+    timer => timer_state()
 }.
 
 %% TODO сделать более симпатично
--type int_timer() ::
+-type timer_state() ::
     {genlib_time:ts(), request_context(), pos_integer(), mg_core_events:history_range()}.
 
 %% actions
@@ -149,7 +161,7 @@ start_link(Options) ->
     mg_core_utils_supervisor_wrapper:start_link(
         #{strategy => one_for_all},
         mg_core_utils:lists_compact([
-            mg_core_events_storage:child_spec(Options),
+            mg_core_events_storage:child_spec(events_storage_options(Options), events),
             mg_core_machine_tags:child_spec(tags_machine_options(Options), tags),
             mg_core_machine:child_spec(machine_options(Options), automaton)
         ])
@@ -213,7 +225,7 @@ call(Options, Ref, Args, HRange, ReqCtx, Deadline) ->
 get_machine(Options, Ref, HRange) ->
     % нужно понимать, что эти операции разнесены по времени, и тут могут быть рэйсы
     ID = ref2id(Options, Ref),
-    InitialState = opaque_to_state(mg_core_machine:get(machine_options(Options), ID)),
+    InitialState = mg_core_machine:get(machine_options(Options), ID),
     EffectiveState = maybe_apply_delayed_actions(InitialState),
     _ = mg_core_utils:throw_if_undefined(EffectiveState, {logic, machine_not_found}),
     machine(Options, ID, EffectiveState, HRange).
@@ -241,7 +253,7 @@ ref2id(Options, {tag, Tag}) ->
     events_range => events_range(),
     aux_state => aux_state(),
     delayed_actions => delayed_actions(),
-    timer => int_timer() | undefined
+    timer => timer_state() | undefined
 }.
 -type delayed_actions() ::
     #{
@@ -270,25 +282,17 @@ processor_child_spec(Options) ->
     Deadline :: deadline(),
     PackedState :: mg_core_machine:machine_state(),
     Result :: mg_core_machine:processor_result().
-process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, PackedState) ->
+process_machine(Options, ID, Impact, PCtx, ReqCtx, Deadline, State) ->
     {ReplyAction, ProcessingFlowAction, NewState} =
         try
-            process_machine_(
-                Options,
-                ID,
-                Impact,
-                PCtx,
-                ReqCtx,
-                Deadline,
-                opaque_to_state(PackedState)
-            )
+            process_machine_(Options, ID, Impact, PCtx, ReqCtx, Deadline, try_init_state(State))
         catch
             throw:{transient, Reason}:ST ->
                 erlang:raise(throw, {transient, Reason}, ST);
             throw:Reason ->
                 erlang:throw({transient, {processor_unavailable, Reason}})
         end,
-    {ReplyAction, ProcessingFlowAction, state_to_opaque(NewState)}.
+    {ReplyAction, ProcessingFlowAction, NewState}.
 
 %%
 
@@ -433,8 +437,8 @@ retry_store_events(Options, ID, Deadline, Events) ->
     ).
 
 -spec store_events(options(), id(), [event()]) -> ok.
-store_events(Options, ID, Events) ->
-    mg_core_events_storage:store_events(Options, ID, Events).
+store_events(Options = #{namespace := NS}, ID, Events) ->
+    mg_core_events_storage:store_events(events_storage_options(Options), NS, ID, Events).
 
 -spec update_event_sinks(options(), id(), request_context(), deadline(), state()) -> ok.
 update_event_sinks(
@@ -576,37 +580,40 @@ process_repair(Options = #{processor := Processor}, ReqCtx, Deadline, Args, Mach
     state()
 ) ->
     state().
-handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, Deadline, StateWas) ->
-    {State, Events} = handle_state_change(
+handle_processing_result(Options, ID, StateChange, ComplexAction, ReqCtx, Deadline, State) ->
+    {StateNext, Events} = handle_state_change(
         Options,
         StateChange,
-        handle_complex_action(ComplexAction, ReqCtx, StateWas)
+        handle_complex_action(ComplexAction, ReqCtx, State)
     ),
     ok = retry_store_events(Options, ID, Deadline, Events),
     ok = emit_action_beats(Options, ID, ReqCtx, ComplexAction),
-    State.
+    StateNext.
 
 -spec handle_state_change(options(), state_change(), state()) ->
     {state(), [event()]}.
 handle_state_change(
     Options,
     {AuxState, EventsBodies},
-    StateWas = #{events_range := EventsRangeWas}
+    State = #{events_range := EventsRange}
 ) ->
-    {Events, EventsRange} = mg_core_events:generate_events_with_range(EventsBodies, EventsRangeWas),
+    {Events, EventsRangeNext} = mg_core_events:generate_events_with_range(
+        EventsBodies,
+        EventsRange
+    ),
     DelayedActions = #{
         % NOTE
         % This is a range of events which are not yet pushed to event sinks
-        new_events_range => diff_event_ranges(EventsRange, EventsRangeWas)
+        new_events_range => diff_event_ranges(EventsRangeNext, EventsRange)
     },
-    State = add_delayed_actions(
+    StateNext = add_delayed_actions(
         DelayedActions,
-        StateWas#{
-            events_range := EventsRange,
+        State#{
+            events_range := EventsRangeNext,
             aux_state := AuxState
         }
     ),
-    maybe_stash_events(Options, State, Events).
+    maybe_stash_events(Options, StateNext, Events).
 
 -spec diff_event_ranges(events_range(), events_range()) -> events_range().
 diff_event_ranges(LHS, undefined) ->
@@ -617,14 +624,14 @@ diff_event_ranges(LHS, RHS) ->
 
 -spec handle_complex_action(complex_action(), request_context(), state()) ->
     state().
-handle_complex_action(ComplexAction, ReqCtx, StateWas) ->
+handle_complex_action(ComplexAction, ReqCtx, State) ->
     TimerAction = maps:get(timer, ComplexAction, undefined),
-    State = handle_timer_action(TimerAction, ReqCtx, StateWas),
+    StateNext = handle_timer_action(TimerAction, ReqCtx, State),
     DelayedActions = #{
         add_tag => maps:get(tag, ComplexAction, undefined),
         remove => maps:get(remove, ComplexAction, undefined)
     },
-    add_delayed_actions(DelayedActions, State).
+    add_delayed_actions(DelayedActions, StateNext).
 
 -spec handle_timer_action(undefined | timer_action(), request_context(), state()) ->
     state().
@@ -747,9 +754,9 @@ concat_events(Events, Acc) ->
     [Events | Acc].
 
 -spec storage_event_getter(options(), mg_core:id()) -> event_getter().
-storage_event_getter(Options, ID) ->
+storage_event_getter(Options = #{namespace := NS}, ID) ->
     fun(Range) ->
-        mg_core_events_storage:get_events(Options, ID, Range)
+        mg_core_events_storage:get_events(events_storage_options(Options), NS, ID, Range)
     end.
 
 -spec event_list_getter([mg_core_events:event()]) -> event_getter().
@@ -757,6 +764,18 @@ event_list_getter(Events) ->
     fun(Range) ->
         mg_core_events:slice_events(Events, Range)
     end.
+
+-spec try_init_state(state() | undefined) -> state().
+try_init_state(undefined) ->
+    #{
+        events => [],
+        events_range => undefined,
+        aux_state => {#{}, <<>>},
+        delayed_actions => undefined,
+        timer => undefined
+    };
+try_init_state(State) ->
+    State.
 
 -spec maybe_apply_delayed_actions(state()) -> state() | undefined.
 maybe_apply_delayed_actions(#{delayed_actions := undefined} = State) ->
@@ -796,14 +815,19 @@ add_delayed_action(new_events_range, Range, DelayedActions) ->
     % NOTE
     % Preserve yet "unsinked" events in `new_events_range` so they'll get in event sinks next
     % continuation.
-    EventsRangeWas = maps:get(new_events_range, DelayedActions, mg_core_dirange:empty()),
-    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, EventsRangeWas)}.
+    EventsRangePrev = maps:get(new_events_range, DelayedActions, mg_core_dirange:empty()),
+    DelayedActions#{new_events_range => mg_core_dirange:unify(Range, EventsRangePrev)}.
 
 -spec compute_events_range([mg_core_events:event()]) -> mg_core_events:events_range().
 compute_events_range([]) ->
     mg_core_dirange:empty();
 compute_events_range([#{id := ID} | _] = Events) ->
     mg_core_dirange:forward(ID, ID + erlang:length(Events) - 1).
+
+-spec events_storage_options(options()) -> mg_core_storage:options().
+events_storage_options(#{namespace := NS, events_storage := StorageOptions, pulse := Handler}) ->
+    {Mod, Options} = mg_core_utils:separate_mod_opts(StorageOptions, #{}),
+    {Mod, Options#{name => {NS, ?MODULE, events}, pulse => Handler}}.
 
 %%
 %% packer to opaque
@@ -822,20 +846,11 @@ state_to_opaque(State) ->
         mg_core_events:events_range_to_opaque(EventsRange),
         mg_core_events:content_to_opaque(AuxState),
         mg_core_events:maybe_to_opaque(DelayedActions, fun delayed_actions_to_opaque/1),
-        mg_core_events:maybe_to_opaque(Timer, fun int_timer_to_opaque/1),
+        mg_core_events:maybe_to_opaque(Timer, fun timer_to_opaque/1),
         mg_core_events:events_to_opaques(Events)
     ].
 
 -spec opaque_to_state(mg_core_storage:opaque()) -> state().
-%% при создании есть момент (continuation) когда ещё нет стейта
-opaque_to_state(null) ->
-    #{
-        events => [],
-        events_range => undefined,
-        aux_state => {#{}, <<>>},
-        delayed_actions => undefined,
-        timer => undefined
-    };
 opaque_to_state([1, EventsRange, AuxState, DelayedActions]) ->
     #{
         events => [],
@@ -850,7 +865,7 @@ opaque_to_state([1, EventsRange, AuxState, DelayedActions]) ->
 opaque_to_state([2, EventsRange, AuxState, DelayedActions, Timer]) ->
     State = opaque_to_state([1, EventsRange, AuxState, DelayedActions]),
     State#{
-        timer := mg_core_events:maybe_from_opaque(Timer, fun opaque_to_int_timer/1)
+        timer := mg_core_events:maybe_from_opaque(Timer, fun opaque_to_timer/1)
     };
 opaque_to_state([3, EventsRange, AuxState, DelayedActions, Timer]) ->
     #{
@@ -861,7 +876,7 @@ opaque_to_state([3, EventsRange, AuxState, DelayedActions, Timer]) ->
             DelayedActions,
             fun opaque_to_delayed_actions/1
         ),
-        timer => mg_core_events:maybe_from_opaque(Timer, fun opaque_to_int_timer/1)
+        timer => mg_core_events:maybe_from_opaque(Timer, fun opaque_to_timer/1)
     };
 opaque_to_state([4, EventsRange, AuxState, DelayedActions, Timer, Events]) ->
     #{
@@ -872,7 +887,7 @@ opaque_to_state([4, EventsRange, AuxState, DelayedActions, Timer, Events]) ->
             DelayedActions,
             fun opaque_to_delayed_actions/1
         ),
-        timer => mg_core_events:maybe_from_opaque(Timer, fun opaque_to_int_timer/1)
+        timer => mg_core_events:maybe_from_opaque(Timer, fun opaque_to_timer/1)
     }.
 
 -spec delayed_actions_to_opaque(delayed_actions()) -> mg_core_storage:opaque().
@@ -914,12 +929,12 @@ enum_to_int(Value, Enum) ->
 int_to_enum(Value, Enum) ->
     lists:nth(Value, Enum).
 
--spec int_timer_to_opaque(int_timer()) -> mg_core_storage:opaque().
-int_timer_to_opaque({Timestamp, ReqCtx, HandlingTimeout, HRange}) ->
+-spec timer_to_opaque(timer_state()) -> mg_core_storage:opaque().
+timer_to_opaque({Timestamp, ReqCtx, HandlingTimeout, HRange}) ->
     [1, Timestamp, ReqCtx, HandlingTimeout, mg_core_events:history_range_to_opaque(HRange)].
 
--spec opaque_to_int_timer(mg_core_storage:opaque()) -> int_timer().
-opaque_to_int_timer([1, Timestamp, ReqCtx, HandlingTimeout, HRange]) ->
+-spec opaque_to_timer(mg_core_storage:opaque()) -> timer_state().
+opaque_to_timer([1, Timestamp, ReqCtx, HandlingTimeout, HRange]) ->
     {Timestamp, ReqCtx, HandlingTimeout, mg_core_events:opaque_to_history_range(HRange)}.
 
 %%
